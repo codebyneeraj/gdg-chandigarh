@@ -1,0 +1,9 @@
+{
+  "_note": "SYNTHETIC fleet for the demo. Not real municipal data. Depot placed in Industrial Area Phase I for illustration only.",
+  "depot": {"name": "Depot (synthetic), Industrial Area Ph-I", "lat": 30.7046, "lon": 76.8010},
+  "trucks": [
+    {"id": "T1", "capacity": 20},
+    {"id": "T2", "capacity": 20},
+    {"id": "T3", "capacity": 20}
+  ]
+}

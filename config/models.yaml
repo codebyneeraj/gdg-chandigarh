@@ -1,0 +1,20 @@
+# Model configuration. Change providers/models here; no code changes needed.
+# Secrets never go in this file: the Gemini key is read from GEMINI_API_KEY.
+
+vision:
+  # gemini_hosted -> open-weight Gemma 4 (Apache-2.0) served by the Gemini API (default; no GPU needed)
+  # ollama        -> the same open weights self-hosted via Ollama (optional; not used in our benchmark)
+  # replay        -> offline: replays recorded model outputs for known images, else "needs human review"
+  provider: gemini_hosted
+  # Ordered fallback chain: if the first model is overloaded (5xx/429) or times out, the next is tried.
+  hosted_models: [gemma-4-31b-it, gemma-4-26b-a4b-it]
+  timeout_s: 90
+  ollama_model: gemma4:e4b
+  ollama_url: http://localhost:11434
+
+drafting:
+  # gemini   -> Google Gemini API writes the ticket (en / hi / pa)
+  # template -> offline fixed templates (no network)
+  provider: gemini
+  model: gemini-3.5-flash
+  timeout_s: 30

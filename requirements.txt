@@ -1,0 +1,10 @@
+fastapi==0.143.2
+google-genai==2.31.0
+httpx==0.28.1
+ortools==9.15.6755
+pillow==12.3.0
+pydantic==2.14.1
+pytest==9.1.1
+python-multipart==0.0.32
+PyYAML==6.0.3
+uvicorn==0.54.0
