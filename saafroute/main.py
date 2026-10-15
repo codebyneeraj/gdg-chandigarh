@@ -89,9 +89,9 @@ def _scored(rows: list[dict]) -> list[dict]:
     return out
 
 
-def _facts(row: dict, score: float | None) -> dict:
+def _facts(row: dict) -> dict:
     return {"sector": row["sector"], "kind": row["kind"], "waste_type": row["waste_type"],
-            "severity": row["severity"], "reason": row["reason"], "score": score}
+            "severity": row["severity"], "reason": row["reason"]}
 
 
 # ---------------------------------------------------------------- API
@@ -152,8 +152,7 @@ def create_report(request: Request, photo: UploadFile = File(...), sector: int =
                     reason=a.reason if a else None, status="pending_review")
 
     if a and a.kind.value != "clean":
-        row = next(r for r in _scored(db.all()) if r["id"] == rid)
-        d = drafter.draft(lang, _facts(row, row["score"]))
+        d = drafter.draft(lang, _facts(db.get(rid)))
         db.update(rid, ticket_lang=lang, ticket_title=d.title, ticket_body=d.body, ticket_model=drafter.last_used)
     return next(r for r in _scored(db.all()) if r["id"] == rid)
 
@@ -213,8 +212,7 @@ def redraft(rid: int, body: RedraftRequest) -> dict:
     row = _require(rid, "pending_review")
     if not row["kind"] or row["kind"] == "clean":
         raise HTTPException(409, "No analysis to draft from")
-    scored = next(r for r in _scored(db.all()) if r["id"] == rid)
-    d = drafter.draft(body.lang, _facts(row, scored["score"]))
+    d = drafter.draft(body.lang, _facts(row))
     db.update(rid, ticket_lang=body.lang, ticket_title=d.title, ticket_body=d.body, ticket_model=drafter.last_used)
     return {"title": d.title, "body": d.body, "lang": body.lang, "model": drafter.last_used}
 

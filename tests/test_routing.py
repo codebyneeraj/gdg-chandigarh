@@ -67,3 +67,18 @@ def test_sector_data_is_chandigarh():
     assert len(SECTORS) == 55 and 13 not in {s["sector"] for s in SECTORS}
     for s in SECTORS:
         assert 30.66 < s["lat"] < 30.78 and 76.71 < s["lon"] < 76.83
+
+
+def test_naive_baseline_serves_every_stop_even_when_tight():
+    trucks = [Truck("A", 20), Truck("B", 20)]
+    stops = make_stops(14, seed=3, load=(2, 6))
+    base = routing.naive_plan(DEPOT, trucks, stops)
+    assert sorted(i for r in base.routes for i in r.stop_ids) == [s.id for s in stops]
+    assert base.dropped == []
+
+
+def test_optimised_beats_naive_on_demo_like_load():
+    trucks = [Truck("T1", 20), Truck("T2", 20), Truck("T3", 20)]
+    for seed in range(5):
+        res = routing.compare(DEPOT, trucks, make_stops(16, seed=seed, load=(1, 8)))
+        assert res["optimised"].total_distance_m <= res["baseline"].total_distance_m

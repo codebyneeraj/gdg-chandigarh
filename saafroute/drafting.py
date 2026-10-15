@@ -40,13 +40,13 @@ WASTE = {
 TEMPLATE = {
     "en": ("{kind} in Sector {sector}",
            "Citizen report from Sector {sector}: {kind_l} ({waste}), severity {severity}/5. "
-           "Observed: {reason} Please schedule collection. Hotspot score {score}/100."),
+           "Observed: {reason} Please schedule collection."),
     "hi": ("सेक्टर {sector}: {kind}",
            "सेक्टर {sector} से नागरिक रिपोर्ट: {kind} ({waste}), गंभीरता {severity}/5। "
-           "कृपया कचरा उठाने की व्यवस्था करें। हॉटस्पॉट स्कोर: {score}/100।"),
+           "कृपया कचरा उठाने की व्यवस्था करें।"),
     "pa": ("ਸੈਕਟਰ {sector}: {kind}",
            "ਸੈਕਟਰ {sector} ਤੋਂ ਨਾਗਰਿਕ ਰਿਪੋਰਟ: {kind} ({waste}), ਗੰਭੀਰਤਾ {severity}/5। "
-           "ਕਿਰਪਾ ਕਰਕੇ ਕੂੜਾ ਚੁੱਕਣ ਦਾ ਪ੍ਰਬੰਧ ਕਰੋ। ਹੌਟਸਪੌਟ ਸਕੋਰ: {score}/100।"),
+           "ਕਿਰਪਾ ਕਰਕੇ ਕੂੜਾ ਚੁੱਕਣ ਦਾ ਪ੍ਰਬੰਧ ਕਰੋ।"),
 }
 
 
@@ -63,7 +63,7 @@ def template_draft(lang: Lang, facts: dict) -> TicketDraft:
         title=title_t.format(kind=kind, sector=facts["sector"])[:120],
         body=body_t.format(kind=kind, kind_l=kind.lower(), sector=facts["sector"],
                            waste=WASTE[lang].get(facts.get("waste_type") or "", "?"),
-                           severity=facts.get("severity") or "?", score=facts.get("score", "?"),
+                           severity=facts.get("severity") or "?",
                            reason=(facts.get("reason") or "").rstrip(".") + ".")[:1200],
     )
 
@@ -82,7 +82,8 @@ Return JSON with:
 - "title": at most 10 words, naming the problem and the sector
 - "body": 2-4 short sentences for the field supervisor: what was reported, where (sector), how severe,
   what kind of vehicle/crew is likely needed (e.g. a tipper for construction debris, a regular collection
-  vehicle for household waste, a separate pickup for e-waste or hazardous waste), and the hotspot score.
+  vehicle for household waste, a separate pickup for e-waste or hazardous waste).
+  Do not mention a score or priority number: the live score is shown separately and changes over time.
 Keep it plain and polite. This is a DRAFT that a human official will review before anything is dispatched."""
 
 

@@ -147,30 +147,33 @@ def solve(depot: Depot, trucks: list[Truck], stops: list[Stop], time_limit_s: in
 
 
 def naive_plan(depot: Depot, trucks: list[Truck], stops: list[Stop]) -> Plan:
-    """Baseline: a fixed schedule that sweeps stops in sector-number order,
-    filling truck 1, then truck 2, ... (no optimisation). Same stops, same
-    capacities and same distance function as `solve`, so the comparison is fair.
+    """Baseline: a fixed schedule that sweeps stops in sector-number order.
+
+    Stops are split into depot-to-depot trips in that order; a new trip starts
+    when the next stop would exceed capacity. Trips are dealt round-robin to the
+    trucks, so a truck may make more than one trip. Every stop is served, with the
+    same capacities and distance function as `solve`, so the comparison is fair.
     """
     pts = [(depot.lat, depot.lon)] + [(s.lat, s.lon) for s in stops]
     matrix = distance_matrix(pts)
     order = sorted(range(1, len(pts)), key=lambda n: (stops[n - 1].sector, stops[n - 1].id))
-    routes, dropped = [Route(t.id, [], 0, 0) for t in trucks], []
-    nodes_per: list[list[int]] = [[] for _ in trucks]
-    t = 0
+    cap = min(t.capacity for t in trucks)
+    trips: list[list[int]] = [[]]
+    load = 0
     for n in order:
-        load = stops[n - 1].load
-        while t < len(trucks) and routes[t].load + load > trucks[t].capacity:
-            t += 1
-        if t == len(trucks):
-            dropped.append(stops[n - 1].id)
-            continue
-        nodes_per[t].append(n)
-        routes[t].load += load
-        routes[t].stop_ids.append(stops[n - 1].id)
-    for r, nodes in zip(routes, nodes_per):
-        r.distance_m = _route_distance(matrix, nodes)
-        r.path = [pts[0], *[pts[n] for n in nodes], pts[0]] if nodes else []
-    return Plan(routes, dropped, sum(r.distance_m for r in routes))
+        if trips[-1] and load + stops[n - 1].load > cap:
+            trips.append([])
+            load = 0
+        trips[-1].append(n)
+        load += stops[n - 1].load
+    routes = [Route(t.id, [], 0, 0) for t in trucks]
+    for i, trip in enumerate(t for t in trips if t):
+        r = routes[i % len(trucks)]
+        r.stop_ids += [stops[n - 1].id for n in trip]
+        r.load += sum(stops[n - 1].load for n in trip)
+        r.distance_m += _route_distance(matrix, trip)
+        r.path += [pts[0], *[pts[n] for n in trip], pts[0]]
+    return Plan(routes, [], sum(r.distance_m for r in routes))
 
 
 def compare(depot: Depot, trucks: list[Truck], stops: list[Stop]) -> dict:

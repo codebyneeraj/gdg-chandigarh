@@ -21,7 +21,6 @@ sys.path.insert(0, str(ROOT))
 from saafroute.config import DATA_DIR, load_settings  # noqa: E402
 from saafroute.db import DB  # noqa: E402
 from saafroute.drafting import template_draft  # noqa: E402
-from saafroute.scoring import hotspot_score  # noqa: E402
 
 KINDS = [  # (kind, waste_type, severity range, weight)
     ("overflowing_bin", "mixed", (2, 4), 8),
@@ -62,10 +61,9 @@ def main() -> None:
         created = now - timedelta(hours=rnd.uniform(1, 70))
         spread = 0.0012 if i < 7 else 0.003
         lat, lon = s["lat"] + rnd.uniform(-spread, spread), s["lon"] + rnd.uniform(-spread, spread)
-        score = hotspot_score(sev, created, now, 0, s["sector"]).total
         lang = rnd.choice(["en", "en", "hi", "pa"])
         facts = {"sector": s["sector"], "kind": kind, "waste_type": waste, "severity": sev,
-                 "reason": REASONS[kind], "score": score}
+                 "reason": REASONS[kind]}
         d = template_draft(lang, facts)
         approved = i % 3 != 0  # about two-thirds pre-approved so routes can be planned immediately
         db.insert(created_at=created.isoformat(timespec="seconds"), sector=s["sector"], lat=lat, lon=lon,

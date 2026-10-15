@@ -1,1 +1,96 @@
-<!doctype html><title>SaafRoute</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SaafRoute · Chandigarh</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23157a5b'/><path d='M9 17l5 5 9-11' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round'/></svg>">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">✓</span>
+    <div>
+      <h1>SaafRoute</h1>
+      <p class="tag">Waste photos → approved tickets → optimised collection routes · Chandigarh</p>
+    </div>
+  </div>
+  <div class="status" id="status" aria-live="polite">Checking models…</div>
+</header>
+
+<div class="banner">
+  Demo build. Map reports marked <span class="pill synth">synthetic</span> and the whole truck fleet are
+  <strong>synthetic</strong>. Route savings are a <strong>simulation</strong>, not measured municipal results.
+</div>
+
+<main class="grid">
+  <section class="card report" aria-labelledby="h-report">
+    <h2 id="h-report">1 · Report waste</h2>
+    <form id="reportForm">
+      <label class="drop" id="drop">
+        <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" capture="environment" required>
+        <img id="preview" alt="" hidden>
+        <span id="dropText">Tap to take or choose a photo<br><small>JPEG / PNG / WebP, up to 8 MB. Location data inside the photo is removed.</small></span>
+      </label>
+      <div class="row">
+        <label>Sector
+          <select id="sector" name="sector" required></select>
+        </label>
+        <label>Ticket language
+          <select id="lang" name="lang">
+            <option value="en">English</option>
+            <option value="hi">हिन्दी</option>
+            <option value="pa">ਪੰਜਾਬੀ</option>
+          </select>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="useGps"> Attach my GPS location (optional)</label>
+      <button type="submit" id="submitBtn" class="primary">Analyse &amp; create draft ticket</button>
+      <p class="hint" id="formMsg" role="status"></p>
+    </form>
+    <div id="result" class="result" hidden></div>
+  </section>
+
+  <section class="card mapcard" aria-labelledby="h-map">
+    <div class="maphead">
+      <h2 id="h-map">2 · Hotspots &amp; routes</h2>
+      <div class="legend">
+        <span><i class="dot s-high"></i>score ≥ 70</span>
+        <span><i class="dot s-mid"></i>40–69</span>
+        <span><i class="dot s-low"></i>&lt; 40</span>
+        <span><i class="dot s-pend"></i>awaiting review</span>
+      </div>
+    </div>
+    <div id="map" role="region" aria-label="Map of Chandigarh sectors with reports and routes"></div>
+    <div class="routebar">
+      <button id="planBtn" class="primary">Plan routes for approved tickets</button>
+      <label class="check"><input type="checkbox" id="showBase"> Show naive fixed route</label>
+    </div>
+    <div id="savings" class="savings" hidden></div>
+  </section>
+
+  <section class="card queue" aria-labelledby="h-queue">
+    <div class="qhead">
+      <h2 id="h-queue">3 · Tickets</h2>
+      <div class="filters" role="tablist">
+        <button data-f="pending_review" class="on">To review</button>
+        <button data-f="approved">Approved</button>
+        <button data-f="all">All</button>
+      </div>
+    </div>
+    <label class="official">Reviewing official <input id="official" placeholder="Your name / ID" maxlength="60"></label>
+    <div id="tickets" class="tickets"></div>
+  </section>
+</main>
+
+<footer>
+  Open source (Apache-2.0). Photo understanding: <strong>Gemma 4</strong> open-weight model. Ticket drafting: <strong>Gemini</strong>.
+  Officials approve every ticket; the AI never dispatches on its own. Map © OpenStreetMap contributors.
+</footer>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
