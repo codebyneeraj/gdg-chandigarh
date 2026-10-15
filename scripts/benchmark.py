@@ -93,20 +93,34 @@ def summarise(models: list[str], labels: list[dict]) -> dict:
         # "Needs collection" = anything that is not clean; the decision that actually triggers a ticket.
         actionable = sum(1 for r in ok if (r["analysis"]["kind"] == "clean") == (lab[r["id"]]["kind"] == "clean"))
         lat = sorted(r["latency_s"] for r in ok)
+        api_err = sum(1 for r in recs if r["status"] != "ok" and (r["error"] or "").startswith("model error"))
+        invalid = sum(1 for r in recs if r["status"] != "ok" and (r["error"] or "").startswith("invalid output"))
+        k = len(ok)
+
+        def frac(x: int, d: int) -> float | None:
+            return round(x / d, 3) if d else None
+
         summary[model] = {
             "open_weight": model in OPEN_WEIGHT,
             "n": n,
-            "valid_json_first_try": round(len(first_try) / n, 3) if n else None,
-            "valid_after_retry": round(len(ok) / n, 3) if n else None,
-            "needs_review": n - len(ok),
-            "acc_kind": round(kind / n, 3) if n else None,
-            "acc_waste_type": round(wtype / n, 3) if n else None,
-            "acc_severity_exact": round(sev_exact / n, 3) if n else None,
-            "acc_severity_within_1": round(sev_pm1 / n, 3) if n else None,
-            "acc_clean_vs_needs_collection": round(actionable / n, 3) if n else None,
+            "answered": k,
+            "api_errors": api_err,              # 429/5xx/timeouts after the retry: provider availability
+            "invalid_output": invalid,          # model answered but failed schema twice
+            "ok_on_first_attempt": frac(len(first_try), n),  # first call returned schema-valid JSON (API error or invalid JSON = miss)
+            # Accuracy over ALL n images (a failure counts as wrong) ...
+            "acc_kind": frac(kind, n),
+            "acc_waste_type": frac(wtype, n),
+            "acc_severity_exact": frac(sev_exact, n),
+            "acc_severity_within_1": frac(sev_pm1, n),
+            "acc_clean_vs_needs_collection": frac(actionable, n),
+            # ... and over answered images only (model quality when the API responds).
+            "answered_acc_kind": frac(kind, k),
+            "answered_acc_waste_type": frac(wtype, k),
+            "answered_acc_severity_exact": frac(sev_exact, k),
+            "answered_acc_severity_within_1": frac(sev_pm1, k),
+            "answered_acc_clean_vs_needs_collection": frac(actionable, k),
             "latency_median_s": lat[len(lat) // 2] if lat else None,
-            "latency_p90_s": lat[int(len(lat) * 0.9) - 1] if lat else None,
-            "errors": sorted({(r["error"] or "")[:80] for r in recs if r["status"] != "ok"}),
+            "latency_p90_s": lat[max(0, int(len(lat) * 0.9) - 1)] if lat else None,
         }
     return summary
 

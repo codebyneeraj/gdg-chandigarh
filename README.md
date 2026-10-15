@@ -46,7 +46,7 @@ flowchart LR
 | Component | Choice | Why |
 |---|---|---|
 | Photo understanding | **Gemma 4 26B-A4B** (open weights, Apache-2.0) via Gemini API, falling back to Gemma 4 31B | Open-weight model doing the core work; same weights can be self-hosted by any city. Chosen by benchmark, see [docs/model-selection.md](docs/model-selection.md). |
-| Ticket drafting | **Gemini 3.5 Flash-Lite** (→ 3.1 Flash-Lite → 2.5 Flash) | Strong Hindi/Punjabi writing, ~2 s per ticket, higher free-tier daily quota than Flash. |
+| Ticket drafting | **Gemini 3.5 Flash-Lite** (→ 3.1 Flash-Lite → 2.5 Flash) | Clean Hindi/Punjabi drafts in our spot checks, ~2 s per ticket; Gemini 3.5 Flash was capped at 20 free requests/day, so Flash-Lite goes first. |
 | Validation | Pydantic v2 | Strict schema, extra keys rejected. |
 | Scoring | Plain Python | Explainable, testable, no model. |
 | Routing | OR-Tools 9.15 CVRP, guided local search, 3 s limit | Standard, open source, handles capacity and drops low-priority stops if the fleet is full. |
@@ -68,7 +68,17 @@ Capacity units per ticket: litter 1, overflowing bin = severity, illegal dump = 
 Vision benchmark on **41 hand-labelled, openly licensed photos** (Wikimedia Commons, see
 [data/ATTRIBUTION.md](data/ATTRIBUTION.md)). Full method and tables are in [docs/model-selection.md](docs/model-selection.md).
 
-<!-- BENCH_TABLE -->
+| | Gemma 4 26B-A4B (open, **chosen**) | Gemma 4 31B (open) | Gemini 3.5 Flash (closed, reference) |
+|---|---|---|---|
+| Images run / answered | 38 / 34 | 29 / 2 | 41 / 19 |
+| Failures (all API errors; 0 invalid JSON) | 4 × 500 | 27 × 500/503 | 22 × 429 (20/day quota) |
+| Kind accuracy (answered) | 85 % | 2/2 | 84 % |
+| Severity within ±1 (answered) | 100 % | 2/2 | 89 % |
+| Clean vs needs-collection (answered) | 100 % | 2/2 | 95 % |
+| Median latency | 21 s | ~95 s | 9 s |
+
+Run stopped early for the deadline (26B: 38 of 41 images). Gemma 4 31B was mostly unavailable on the
+free API during testing, so its accuracy is unmeasured; it remains a fallback.
 
 Route simulation (synthetic seed data, 16 approved tickets, 3 trucks): optimised **54.9 km** vs naive
 fixed-order **61.6 km** (**10.8 % shorter**). This is a **simulation**. It will differ with real data,

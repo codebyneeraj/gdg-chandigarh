@@ -7,8 +7,9 @@ vision:
   # replay        -> offline: replays recorded model outputs for known images, else "needs human review"
   provider: gemini_hosted
   # Ordered fallback chain: if the first model is overloaded (5xx/429) or times out, the next is tried.
-  hosted_models: [gemma-4-31b-it, gemma-4-26b-a4b-it]
-  timeout_s: 90
+  # 26B first: in our benchmark 31B failed with server errors on 27 of 29 calls (docs/model-selection.md).
+  hosted_models: [gemma-4-26b-a4b-it, gemma-4-31b-it]
+  timeout_s: 120
   ollama_model: gemma4:e4b
   ollama_url: http://localhost:11434
 

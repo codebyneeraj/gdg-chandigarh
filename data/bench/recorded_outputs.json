@@ -1,0 +1,172 @@
+{
+ "0149357ebdd56d595b7cd76748acbfd53297bf7847f53fe02cfd5fdaf3f50213": {
+  "id": "cm001",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"Unsegregated waste is piled on the ground around several recycling containers.\"\n}\n```"
+ },
+ "aadc7d4b2b9199abd2295be007117c146b81a4eaa775006b0b06711672aa08b8": {
+  "id": "cm002",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"dry_recyclable\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large pile of newspapers is overflowing from a large recycling bin.\"\n}\n```"
+ },
+ "7c448b454974f8e5e023a489c57282925d3eb4559a56d0ac88c603b4bd9e062d": {
+  "id": "cm004",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"dry_recyclable\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A trash bin is overflowing with disposable cups, with additional litter scattered on the ground around it.\"\n}\n```"
+ },
+ "84d8c79f2f832ea963326ee1be783ea430875a05bcd512044005a6e0880befa2": {
+  "id": "cm006",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 2,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"The bin is overflowing with mixed street waste like cans and paper, with some litter on the ground.\"\n}\n```"
+ },
+ "d611b211bb7090f62a459804f001eb9969c06459039ebc93658940e48dcd3414": {
+  "id": "cm007",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 4,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"Two large bins are overflowing with unsegregated waste, with significant litter scattered on the ground around them.\"\n}\n```"
+ },
+ "2aedfde51470e70f8dc7d039a62cd2069c528ce0f1f45b36454baa3184c9c2b5": {
+  "id": "cm008",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large wheelie bin is overflowing with plastic bags of mixed waste, with additional litter scattered on the ground.\"\n}\n```"
+ },
+ "0c974c688b7c776b622da38163db165fab8e7b2fdd83662084edaca89ed1c5da": {
+  "id": "cm009",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 1,\n  \"confidence\": 0.9,\n  \"privacy_flag\": false,\n  \"reason\": \"One dumpster is full of black trash bags and there is some litter on the ground around the containers.\"\n}\n```"
+ },
+ "590ea5c206b0e3282c2ce88e799988f99d17b530fc8f6863710b27b7c9d10948": {
+  "id": "cm012",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"dry_recyclable\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 3,\n  \"confidence\": 0.9,\n  \"privacy_flag\": false,\n  \"reason\": \"A large grey bin is overflowing with various dry materials like foam, plastic, and boards.\"\n}\n```"
+ },
+ "c358a8c4a342c7e978450c80e7a67c70f490e54539a22472d33c340f565832be": {
+  "id": "cm014",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"dry_recyclable\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A green public trash bin is overflowing with many disposable plastic and paper coffee cups.\"\n}\n```"
+ },
+ "d53e27dc5f24133e053a394889e83ae1b7481cb2492688a894b41a51cdc57d7b": {
+  "id": "cm015",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large pile of mixed unsegregated waste is dumped in a wooded area without any container.\"\n}\n```"
+ },
+ "872436a9f8c5202b5c55ee14e6d89da08cb562a476d23193cb05b4dad865b561": {
+  "id": "cm016",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"dry_recyclable\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"The forest floor is covered with various dry recyclables like glass bottles, metal cans, and plastic scraps.\"\n}\n```"
+ },
+ "b2737b8fe3e4216ec0b5ca19485563e274c9e002c92e4d426f41fc4bcebf15d4": {
+  "id": "cm017",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"construction_debris\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 4,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large pile of construction debris, including concrete rubble and metal rebar, is dumped on a hillside.\"\n}\n```"
+ },
+ "9197ce612e2cc297b16d42389624112ba2fbc49fa4802df682f155b8f6fc001b": {
+  "id": "cm018",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"bulky\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A pile of discarded furniture including a mattress and chairs is dumped on the sidewalk.\"\n}\n```"
+ },
+ "8ef0ff5168002ca971acddcfcaa48a7f686838a83cdf0159442ca0bb69b893e2": {
+  "id": "cm019",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"construction_debris\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 4,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large pile of construction rubble, concrete, and wood debris is dumped on a hillside.\"\n}\n```"
+ },
+ "fea91b6cbf410b3f1e0b1684c934c1c88462c4d21559a98d3f0470d2cf94e2d3": {
+  "id": "cm022",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"bulky\",\n  \"kind\": \"litter\",\n  \"severity\": 1,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"An abandoned baby stroller is left on rocky ground.\"\n}\n```"
+ },
+ "06dd9ef76df696fec126ae3a9e9bb98ef67a86adc9be2e29fe21c3efcc7d2a90": {
+  "id": "cm023",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 3,\n  \"confidence\": 0.9,\n  \"privacy_flag\": false,\n  \"reason\": \"A significant amount of unsegregated trash, including plastics and paper, is dumped on the slope next to the wall.\"\n}\n```"
+ },
+ "44c4a01cba57513d30105eef94ab85066dbf9872c6891e50e52d90ecdab02727": {
+  "id": "cm025",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 4,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large pile of mixed waste, including a large appliance, wooden pallets, and organic debris, is dumped in a grassy area.\"\n}\n```"
+ },
+ "982095377c0fb515f9067ae6e12c841dc125a36d21c6f75ce6848c11360f62f6": {
+  "id": "cm026",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 4,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large pile of unsegregated mixed waste is illegally dumped on a forested hillside.\"\n}\n```"
+ },
+ "8d5238cd483888b010590a609c5991cdd6ba72d494bda5ef8e32e0180ce12090": {
+  "id": "cm027",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"e_waste\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 2,\n  \"confidence\": 1.0,\n  \"privacy_flag\": false,\n  \"reason\": \"A discarded washing machine and its back panel are lying on the ground in a dirt area.\"\n}\n```"
+ },
+ "de78e73648c87619826d4de80665c513b8d88d61eff968a8046adec65f54e604": {
+  "id": "cm030",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"litter\",\n  \"severity\": 3,\n  \"confidence\": 0.9,\n  \"privacy_flag\": true,\n  \"reason\": \"Widespread scattered litter consisting of mixed household waste is spread across the ground near a bin and concrete structures.\"\n}\n```"
+ },
+ "b9db5f3482b1852dd806f7351c4417ffb79a1b0b36c65715f2af39aa2a973fc0": {
+  "id": "cm031",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"none\",\n  \"kind\": \"clean\",\n  \"severity\": 1,\n  \"confidence\": 1.0,\n  \"privacy_flag\": false,\n  \"reason\": \"The image shows a decorative penguin-shaped bin in a garden with no visible waste.\"\n}\n```"
+ },
+ "f576e390229d835fb0a84da51c7b76e10f2c549b4bcb15ea68371176dca72e7e": {
+  "id": "cm033",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"none\",\n  \"kind\": \"clean\",\n  \"severity\": 1,\n  \"confidence\": 1.0,\n  \"privacy_flag\": false,\n  \"reason\": \"The bin is closed and there is no visible waste or litter around it.\"\n}\n```"
+ },
+ "e72ca75333ff39443fbcf4b0e4db7801368dc65740c5d3b1351dd9495944f184": {
+  "id": "cm034",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"none\",\n  \"kind\": \"clean\",\n  \"severity\": 1,\n  \"confidence\": 1.0,\n  \"privacy_flag\": false,\n  \"reason\": \"The area appears clean with no visible waste or litter present.\"\n}\n```"
+ },
+ "c533d06ed17ece73890a9e8a4df683257601541d5e175e1206829dc4eee8098d": {
+  "id": "cm035",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"none\",\n  \"kind\": \"clean\",\n  \"severity\": 1,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"The waste bins are empty and the surrounding area is clean.\"\n}\n```"
+ },
+ "c70838416d742ee5cea96d4c04e6e4cdd0fb5d0831108319d5b9af1c53cb44a9": {
+  "id": "cm037",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"none\",\n  \"kind\": \"clean\",\n  \"severity\": 1,\n  \"confidence\": 1.0,\n  \"privacy_flag\": false,\n  \"reason\": \"The waste bins are empty and the surrounding area is clean with only minimal natural debris.\"\n}\n```"
+ },
+ "458391b3322d029adb172733c3a0a78297764400e599e5f20c2959890132a2e1": {
+  "id": "cm038",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"none\",\n  \"kind\": \"clean\",\n  \"severity\": 1,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"The waste bins are not overflowing and there is no litter visible on the sidewalk.\"\n}\n```"
+ },
+ "b1affc366c2d793cc06090846c02b8f7c0ba44cfc4fe362efda5bdfb95766036": {
+  "id": "cm040",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"none\",\n  \"kind\": \"clean\",\n  \"severity\": 1,\n  \"confidence\": 1.0,\n  \"privacy_flag\": false,\n  \"reason\": \"The bin is empty and no waste is visible in the scene.\"\n}\n```"
+ },
+ "31db6398cf1692d0a8e00d2fb5170781a52a71a4d4e0b58204105d6b6cd26fda": {
+  "id": "cm056",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"overflowing_bin\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": true,\n  \"reason\": \"A large metal bin is overflowing with mixed garbage, with litter scattered on the ground around it.\"\n}\n```"
+ },
+ "6d4abfae4a69ca99523825b4ad059f418aa0027a6ac8dd33222f5d2a91d37ea9": {
+  "id": "cm057",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"litter\",\n  \"severity\": 3,\n  \"confidence\": 0.9,\n  \"privacy_flag\": false,\n  \"reason\": \"The muddy shoreline is covered with scattered mixed waste, including plastics and clay items.\"\n}\n```"
+ },
+ "4f0834e553cc34cff1b912785ebd1d36c3ddfa3a2a4ea9844dfc8a653d66010c": {
+  "id": "cm060",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"dry_recyclable\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large pile of newspapers and plastic packaging is dumped on the ground.\"\n}\n```"
+ },
+ "4729c412f9a9d42cc52a572667c70a1a16708641bc829d8d15150fea5973e41e": {
+  "id": "cm062",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 3,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"Mixed plastic waste and debris are scattered along the shoreline and floating in the water.\"\n}\n```"
+ },
+ "21f50406ebe9060ea5894d498d3afb0016e01f200cfbb82e4685531d37262fc0": {
+  "id": "cm064",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"illegal_dump\",\n  \"severity\": 4,\n  \"confidence\": 0.95,\n  \"privacy_flag\": false,\n  \"reason\": \"A large, unsegregated pile of mixed waste including plastics and paper is dumped in an open area.\"\n}\n```"
+ },
+ "a85bf15b158c1f8cd126f45d8f9ca1ef5dd94ab073ff71db823fe9d1957e351b": {
+  "id": "cm068",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"dry_recyclable\",\n  \"kind\": \"litter\",\n  \"severity\": 2,\n  \"confidence\": 0.95,\n  \"privacy_flag\": true,\n  \"reason\": \"Scattered newspapers and cardboard pieces on the ground.\"\n}\n```"
+ },
+ "ffb6334139c89f714b2346e797b443e23a379d648ce2ef6dab9ddae05464a169": {
+  "id": "cm070",
+  "model": "gemini-api:gemma-4-26b-a4b-it",
+  "raw": "```json\n{\n  \"waste_type\": \"mixed\",\n  \"kind\": \"litter\",\n  \"severity\": 2,\n  \"confidence\": 0.85,\n  \"privacy_flag\": false,\n  \"reason\": \"Scattered plastic and other household waste is visible throughout the vegetation and on the ground.\"\n}\n```"
+ }
+}
