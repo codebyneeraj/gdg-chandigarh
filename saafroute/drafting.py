@@ -88,31 +88,50 @@ Keep it plain and polite. This is a DRAFT that a human official will review befo
 
 
 class GeminiDrafter:
-    def __init__(self, model: str, api_key: str, timeout_s: float) -> None:
+    """`models` is an ordered fallback chain: free-tier quotas are per model per day,
+    so if one model is exhausted (429) or overloaded (5xx) the next one is tried."""
+
+    def __init__(self, models: list[str], api_key: str, timeout_s: float) -> None:
         from google import genai
         from google.genai import types
 
         self._types = types
-        self.name = f"gemini-api:{model}"
-        self.model = model
+        self.models = models
+        self.name = f"gemini-api:{models[0]}"
         self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=int(timeout_s * 1000)))
 
+    def _call(self, model: str, prompt: str) -> TicketDraft:
+        resp = self.client.models.generate_content(
+            model=model, contents=prompt,
+            config=self._types.GenerateContentConfig(
+                temperature=0.2, response_mime_type="application/json",
+                response_json_schema=TicketDraft.model_json_schema()),
+        )
+        return TicketDraft.model_validate_json(resp.text or "")
+
     def draft(self, lang: Lang, facts: dict) -> TicketDraft:
-        prompt = DRAFT_PROMPT.format(lang_name=LANG_NAMES[lang], facts=json.dumps(facts, ensure_ascii=False))
+        from google.genai import errors
+
+        base = DRAFT_PROMPT.format(lang_name=LANG_NAMES[lang], facts=json.dumps(facts, ensure_ascii=False))
         last: Exception | None = None
-        for _ in range(2):
-            try:
-                resp = self.client.models.generate_content(
-                    model=self.model, contents=prompt,
-                    config=self._types.GenerateContentConfig(
-                        temperature=0.2, response_mime_type="application/json", response_schema=TicketDraft),
-                )
-                return TicketDraft.model_validate_json(resp.text or "")
-            except (ValidationError, ValueError) as exc:
-                last = exc
-                prompt += f"\nYour previous answer was invalid ({str(exc)[:200]}). Return only valid JSON."
-            except Exception as exc:  # network / quota errors
-                last = exc
+        for model in self.models:
+            prompt = base
+            for _ in range(2):  # one retry per model for invalid output
+                try:
+                    d = self._call(model, prompt)
+                    self.name = f"gemini-api:{model}"
+                    return d
+                except (ValidationError, ValueError) as exc:
+                    last = exc
+                    prompt = base + f"\nYour previous answer was invalid ({str(exc)[:200]}). Return only valid JSON."
+                except errors.ClientError as exc:
+                    last = exc
+                    if getattr(exc, "code", None) != 429:
+                        raise
+                    break  # quota exhausted: next model
+                except Exception as exc:  # 5xx, timeouts
+                    last = exc
+                    break
         raise RuntimeError(f"drafting failed: {last}")
 
 
@@ -141,5 +160,5 @@ class FallbackDrafter:
 
 def build_drafter(cfg: DraftingConfig, api_key: str | None) -> FallbackDrafter:
     if cfg.provider == "gemini" and api_key:
-        return FallbackDrafter(GeminiDrafter(cfg.model, api_key, cfg.timeout_s))
+        return FallbackDrafter(GeminiDrafter(cfg.models, api_key, cfg.timeout_s))
     return FallbackDrafter(None)

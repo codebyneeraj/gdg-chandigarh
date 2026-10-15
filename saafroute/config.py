@@ -3,7 +3,7 @@
 Environment variables win over the file so a demo machine can switch models
 without editing tracked files:
   SAAFROUTE_VISION_PROVIDER, SAAFROUTE_VISION_MODELS (comma-separated),
-  SAAFROUTE_DRAFT_PROVIDER, SAAFROUTE_DRAFT_MODEL, SAAFROUTE_DB, OLLAMA_URL
+  SAAFROUTE_DRAFT_PROVIDER, SAAFROUTE_DRAFT_MODELS (comma-separated), SAAFROUTE_DB, OLLAMA_URL
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class VisionConfig:
 @dataclass(frozen=True)
 class DraftingConfig:
     provider: str
-    model: str
+    models: list[str]
     timeout_s: float
 
 
@@ -58,7 +58,8 @@ def load_settings(path: Path | None = None) -> Settings:
     )
     drafting = DraftingConfig(
         provider=env("SAAFROUTE_DRAFT_PROVIDER", d["provider"]),
-        model=env("SAAFROUTE_DRAFT_MODEL", d["model"]),
+        models=(env("SAAFROUTE_DRAFT_MODELS").split(",") if env("SAAFROUTE_DRAFT_MODELS")
+                else list(d["models"])),
         timeout_s=float(d.get("timeout_s", 30)),
     )
     db_path = Path(env("SAAFROUTE_DB", DATA_DIR / "saafroute.db"))
