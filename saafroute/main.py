@@ -252,4 +252,13 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": "Something went wrong on the server. Please try again."})
 
 
+@app.middleware("http")
+async def no_stale_ui(request: Request, call_next):
+    """Browsers must re-check the UI files on every load, so a redesign is never hidden by a cached copy."""
+    resp = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
