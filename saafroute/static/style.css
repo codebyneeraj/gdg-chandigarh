@@ -1,11 +1,11 @@
 :root {
-  --bg: #f5f2ea;
-  --card: #fffdf7;
-  --card-2: #fbf9f3;
+  --bg: #ffffff;
+  --card: #ffffff;
+  --card-2: #f6f7f4;
   --ink: #10291f;
   --muted: #53635a;
-  --line: #e3ded2;
-  --line-2: #c9c3b4;
+  --line: #e2e6e1;
+  --line-2: #c4ccc6;
   --forest: #10291f;
   --forest-2: #173a2e;
   --lime: #c6f24e;
@@ -19,14 +19,7 @@
   --warn-ink: #6b4a00;
   --radius: 24px;
   font-size: 16px;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d1511; --card: #16201b; --card-2: #1b2721; --ink: #eaf0ec; --muted: #a9b8af; --line: #27342d; --line-2: #3a4a41;
-    --forest: #08110d; --forest-2: #10291f;
-    --high: #ff8a6b; --mid: #f0b24a; --low: #62c28b; --pend: #9a90ff;
-    --pend-bg: #2a2650; --pend-ink: #c9c3ff; --warn-bg: #3a2f12; --warn-ink: #ffe3a1;
-  }
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); overflow-x: hidden;
@@ -39,31 +32,31 @@ a:focus-visible, .chip-toggle:focus-within, .drop:focus-within { outline: 3px so
 
 /* ---------- top bar ---------- */
 .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 18px 40px; background: var(--forest); color: #f5f2ea; }
+  padding: 18px 40px; background: #ffffff; color: var(--ink); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 14px; }
-.logo { width: 44px; height: 44px; border-radius: 12px; background: var(--lime); color: #10291f; display: grid; place-items: center; }
+.logo { width: 44px; height: 44px; border-radius: 12px; background: var(--forest); color: var(--lime); display: grid; place-items: center; }
 .top h1 { font-size: 1.5rem; }
-.tag { margin: 2px 0 0; font-size: .875rem; color: #b6c8bd; }
+.tag { margin: 2px 0 0; font-size: .875rem; color: var(--muted); }
 .top-right { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .status { display: flex; flex-wrap: wrap; gap: 8px; font-size: .8125rem; }
-.status .chip { border: 1px solid #2d5546; border-radius: 999px; padding: 6px 12px; color: #d9e4de; }
-.status .ok::before { content: "● "; color: var(--lime); }
-.status .bad::before { content: "● "; color: #ff8a6b; }
+.status .chip { border: 1px solid var(--line-2); border-radius: 999px; padding: 6px 12px; color: var(--ink); }
+.status .ok::before { content: "● "; color: var(--low); }
+.status .bad::before { content: "● "; color: var(--high); }
 .cta { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px; border: 0; border-radius: 999px;
-  background: var(--lime); color: #10291f; font-weight: 700; cursor: pointer; }
-.cta:hover { filter: brightness(1.05); }
+  background: var(--forest); color: #ffffff; font-weight: 700; cursor: pointer; }
+.cta:hover { background: var(--forest-2); }
 .banner { background: var(--warn-bg); color: var(--warn-ink); padding: 10px 40px; font-size: .875rem; }
 
 /* ---------- page ---------- */
 .page { padding: 28px 40px 40px; display: flex; flex-direction: column; gap: 24px; max-width: 1760px; margin: 0 auto; }
 .stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px 24px; }
-.tile.dark { background: var(--forest); border-color: var(--forest); color: #f5f2ea; }
+.tile.dark { background: var(--lime); border-color: var(--lime); color: var(--ink); }
 .t-label { font-size: .875rem; color: var(--muted); }
-.tile.dark .t-label, .tile.dark small { color: #b6c8bd; }
+.tile.dark .t-label, .tile.dark small { color: #2e4a3c; }
 .t-val { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
 .t-val span { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 2.75rem; line-height: 1; }
-.tile.dark .t-val span { color: var(--lime); }
+.tile.dark .t-val span { color: var(--ink); }
 .t-val small { font-size: .875rem; color: var(--muted); }
 .t-val small.accent { color: var(--pend-ink); font-weight: 700; }
 
