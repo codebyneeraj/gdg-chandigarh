@@ -4,91 +4,121 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SaafRoute · Chandigarh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet.css">
 <link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23157a5b'/><path d='M9 17l5 5 9-11' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2310291f'/><path d='M9 17l5 5 9-11' stroke='%23c6f24e' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 </head>
 <body>
 <header class="top">
   <div class="brand">
-    <span class="logo" aria-hidden="true">✓</span>
+    <span class="logo" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4 10-10"/></svg>
+    </span>
     <div>
       <h1>SaafRoute</h1>
-      <p class="tag">Waste photos → approved tickets → optimised collection routes · Chandigarh</p>
+      <p class="tag">Chandigarh · solid waste operations</p>
     </div>
   </div>
-  <div class="status" id="status" aria-live="polite">Checking models…</div>
+  <div class="top-right">
+    <div class="status" id="status" aria-live="polite">Checking models…</div>
+    <button type="button" class="cta" id="openReport">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      New report
+    </button>
+  </div>
 </header>
 
 <div class="banner">
-  Demo build. Map reports marked <span class="pill synth">synthetic</span> and the whole truck fleet are
-  <strong>synthetic</strong>. Route savings are a <strong>simulation</strong>, not measured municipal results.
+  Demo data: map reports marked <span class="pill synth">synthetic</span> and the whole truck fleet are <strong>synthetic</strong>.
+  Route savings are a <strong>simulation</strong>, not measured municipal results.
 </div>
 
-<main class="grid">
-  <section class="card report" aria-labelledby="h-report">
-    <h2 id="h-report">1 · Report waste</h2>
-    <form id="reportForm">
-      <label class="drop" id="drop">
-        <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" capture="environment" required>
-        <img id="preview" alt="" hidden>
-        <span id="dropText">Tap to take or choose a photo<br><small>JPEG / PNG / WebP, up to 8 MB. Location data inside the photo is removed.</small></span>
-      </label>
-      <div class="row">
-        <label>Sector
-          <select id="sector" name="sector" required></select>
-        </label>
-        <label>Ticket language
-          <select id="lang" name="lang">
-            <option value="en">English</option>
-            <option value="hi">हिन्दी</option>
-            <option value="pa">ਪੰਜਾਬੀ</option>
-          </select>
-        </label>
-      </div>
-      <label class="check"><input type="checkbox" id="useGps"> Attach my GPS location (optional)</label>
-      <button type="submit" id="submitBtn" class="primary">Analyse &amp; create draft ticket</button>
-      <p class="hint" id="formMsg" role="status"></p>
-    </form>
-    <div id="result" class="result" hidden></div>
+<main class="page">
+  <section class="stat-strip" aria-label="Today at a glance">
+    <div class="tile"><div class="t-label">Waiting for review</div><div class="t-val"><span id="stat-review">–</span><small class="accent">tickets</small></div></div>
+    <div class="tile"><div class="t-label">Approved, routed</div><div class="t-val"><span id="stat-approved">–</span><small id="stat-approved-sub">tickets</small></div></div>
+    <div class="tile"><div class="t-label">Route length</div><div class="t-val"><span id="stat-km">–</span><small id="stat-km-sub">plan routes to compare</small></div></div>
+    <div class="tile dark"><div class="t-label">Simulated saving</div><div class="t-val"><span id="stat-saved">–</span><small id="stat-saved-sub">vs fixed route</small></div></div>
   </section>
 
-  <section class="card mapcard" aria-labelledby="h-map">
-    <div class="maphead">
-      <h2 id="h-map">2 · Hotspots &amp; routes</h2>
-      <div class="legend">
-        <span><i class="dot s-high"></i>score ≥ 70</span>
-        <span><i class="dot s-mid"></i>40–69</span>
-        <span><i class="dot s-low"></i>&lt; 40</span>
-        <span><i class="dot s-pend"></i>awaiting review</span>
+  <div class="cols">
+    <section class="card mapcard" aria-labelledby="h-map">
+      <div class="head">
+        <h2 id="h-map">Hotspots and routes</h2>
+        <div class="route-actions">
+          <button id="planBtn" class="solid" type="button">Plan routes</button>
+          <label class="chip-toggle"><input type="checkbox" id="showBase"><span>Compare with fixed route</span></label>
+        </div>
       </div>
-    </div>
-    <div id="map" role="region" aria-label="Map of Chandigarh sectors with reports and routes"></div>
-    <div class="routebar">
-      <button id="planBtn" class="primary">Plan routes for approved tickets</button>
-      <label class="check"><input type="checkbox" id="showBase"> Show naive fixed route</label>
-    </div>
-    <div id="savings" class="savings" hidden></div>
-  </section>
+      <div class="map-wrap">
+        <div id="map" role="region" aria-label="Map of Chandigarh sectors with reports and routes"></div>
+        <div class="legend" aria-label="Marker colours">
+          <span><i class="dot s-high"></i>score 70+</span>
+          <span><i class="dot s-mid"></i>40 to 69</span>
+          <span><i class="dot s-low"></i>under 40</span>
+          <span><i class="dot s-pend"></i>awaiting review</span>
+        </div>
+      </div>
+      <div id="savings" class="savings" hidden></div>
+    </section>
 
-  <section class="card queue" aria-labelledby="h-queue">
-    <div class="qhead">
-      <h2 id="h-queue">3 · Tickets</h2>
-      <div class="filters" role="tablist">
-        <button data-f="pending_review" class="on">To review</button>
-        <button data-f="approved">Approved</button>
-        <button data-f="all">All</button>
+    <section class="card queue" aria-labelledby="h-queue">
+      <div class="head">
+        <h2 id="h-queue">Tickets</h2>
+        <div class="filters" role="group" aria-label="Filter tickets">
+          <button type="button" data-f="pending_review" class="on">To review</button>
+          <button type="button" data-f="approved">Approved</button>
+          <button type="button" data-f="all">All</button>
+        </div>
       </div>
-    </div>
-    <label class="official">Reviewing official <input id="official" placeholder="Your name / ID" maxlength="60"></label>
-    <div id="tickets" class="tickets"></div>
-  </section>
+      <label class="official">Reviewing official <input id="official" placeholder="Your name or ID" maxlength="60" autocomplete="off"></label>
+      <div id="tickets" class="tickets"></div>
+    </section>
+  </div>
+
+  <p class="foot">
+    Open source (Apache-2.0). Photo understanding: <strong>Gemma 4</strong>, an open-weight model. Ticket drafting: <strong>Gemini</strong>.
+    An official approves every ticket; the AI never dispatches on its own. Map © OpenStreetMap contributors.
+  </p>
 </main>
 
-<footer>
-  Open source (Apache-2.0). Photo understanding: <strong>Gemma 4</strong> open-weight model. Ticket drafting: <strong>Gemini</strong>.
-  Officials approve every ticket; the AI never dispatches on its own. Map © OpenStreetMap contributors.
-</footer>
+<dialog id="reportDialog" aria-labelledby="h-report">
+  <div class="dlg-head">
+    <h2 id="h-report">Report waste</h2>
+    <button type="button" class="icon-btn" id="closeReport" aria-label="Close">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <form id="reportForm">
+    <label class="drop" id="drop">
+      <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp" capture="environment" required>
+      <img id="preview" alt="Chosen photo preview" hidden>
+      <span id="dropText">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <strong>Take or choose a photo</strong>
+        <small>JPEG, PNG or WebP, up to 8 MB. Location data inside the photo is removed.</small>
+      </span>
+    </label>
+    <div class="row">
+      <label>Sector
+        <select id="sector" name="sector" required></select>
+      </label>
+      <label>Ticket language
+        <select id="lang" name="lang">
+          <option value="en">English</option>
+          <option value="hi">हिन्दी</option>
+          <option value="pa">ਪੰਜਾਬੀ</option>
+        </select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" id="useGps"> Attach my GPS location (optional)</label>
+    <button type="submit" id="submitBtn" class="solid big">Analyse and create draft ticket</button>
+    <p class="hint" id="formMsg" role="status"></p>
+  </form>
+  <div id="result" class="result" hidden></div>
+</dialog>
 
 <script src="vendor/leaflet.js"></script>
 <script src="app.js"></script>

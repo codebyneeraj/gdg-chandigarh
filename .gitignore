@@ -6,3 +6,5 @@ __pycache__/
 .env
 data/saafroute.db
 data/uploads/
+video/node_modules/
+video/out/

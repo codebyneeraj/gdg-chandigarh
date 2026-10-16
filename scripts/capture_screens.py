@@ -92,7 +92,7 @@ def main() -> None:
             # 1. Desktop: routes planned with naive overlay
             p.call("Emulation.setDeviceMetricsOverride", width=1440, height=900, deviceScaleFactor=1, mobile=False)
             p.call("Page.navigate", url=args.base + "#plan")
-            p.wait("document.querySelector('#savings .stat') !== null", 60)
+            p.wait("document.querySelector('#stat-saved').textContent.includes('%')", 60)
             time.sleep(2.5)
             p.shot("dashboard_routes", 1440, 900)
             p.js("document.querySelector('#showBase').click()")
@@ -104,6 +104,8 @@ def main() -> None:
             # 2. Real upload through the UI (live models)
             p.call("Page.navigate", url=args.base)
             p.wait("document.querySelectorAll('#sector option').length > 50", 30)
+            p.js("document.querySelector('#openReport').click(); true")
+            time.sleep(0.5)
             p.js(f"document.querySelector('#sector').value='{args.sector}'; document.querySelector('#lang').value='{args.lang}'; "
                  "document.querySelector('#official').value='JE Demo'; true")
             node = p.call("DOM.querySelector", nodeId=p.call("DOM.getDocument")["root"]["nodeId"], selector="#photo")["nodeId"]
@@ -115,16 +117,16 @@ def main() -> None:
                    "|| document.querySelector('#formMsg').classList.contains('err')", 300)
             print("upload took", round(time.time() - t0, 1), "s:", p.js("document.querySelector('#formMsg').textContent"))
             time.sleep(2)
-            p.js("window.scrollTo(0,0)")
             p.shot("upload_result", 1440, 900)
-            p.js("document.querySelector('.ticket.focus')?.scrollIntoView({block:'center'})")
+            p.js("document.querySelector('#viewTicket').click(); true")
+            time.sleep(1.5)
             time.sleep(1)
             p.shot("ticket_review", 1440, 900)
 
             # 3. Phone
             p.call("Emulation.setDeviceMetricsOverride", width=390, height=844, deviceScaleFactor=2, mobile=True)
             p.call("Page.navigate", url=args.base)
-            p.wait("document.querySelectorAll('.ticket').length > 0", 30)
+            p.wait("document.querySelectorAll('.ticket').length > 0 && document.querySelector('#stat-saved').textContent.includes('%')", 60)
             time.sleep(2)
             p.shot("mobile", 390, 844)
             p.shot("mobile_full", 390, 844, full=True)

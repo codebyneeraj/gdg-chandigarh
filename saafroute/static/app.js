@@ -6,9 +6,11 @@ const KIND = { overflowing_bin: "Overflowing bin", illegal_dump: "Illegal dumpin
 const WASTE = { mixed: "Mixed", dry_recyclable: "Dry / recyclable", wet_organic: "Wet / organic", construction_debris: "Construction debris",
   bulky: "Bulky items", e_waste: "E-waste", hazardous: "Hazardous", none: "None" };
 const TRUCK_COLORS = ["#1565c0", "#00897b", "#8e24aa", "#f4511e", "#3949ab"];
+const COLORS = { high: "#c0381b", mid: "#b86b00", low: "#2a7a4b", pend: "#5b4fd1", none: "#6b7280" };
 
 let reports = [];
 let filter = "pending_review";
+let expandedId = null;
 let map, reportLayer, routeLayer, baseLayer, lastPlan = null;
 const markers = new Map();
 
@@ -20,14 +22,10 @@ async function api(path, opts = {}) {
   return body;
 }
 
-function scoreColor(r) {
-  if (r.status === "pending_review") return "var(--pend)";
-  if (r.score == null) return "#888";
-  return r.score >= 70 ? "var(--high)" : r.score >= 40 ? "var(--mid)" : "var(--low)";
-}
 function scoreHex(r) {
-  if (r.status === "pending_review") return "#6b5bd2";
-  return r.score >= 70 ? "#c62828" : r.score >= 40 ? "#ef8a17" : "#2e7d32";
+  if (r.status === "pending_review") return COLORS.pend;
+  if (r.score == null) return COLORS.none;
+  return r.score >= 70 ? COLORS.high : r.score >= 40 ? COLORS.mid : COLORS.low;
 }
 
 /* ---------- status ---------- */
@@ -36,10 +34,32 @@ async function loadStatus() {
     const h = await api("/api/health");
     const v = h.vision, d = h.drafting;
     $("#status").innerHTML =
-      `<span class="chip ${v.available ? "ok" : "bad"}">Vision: ${esc(v.model)}</span>` +
-      `<span class="chip ${d.model !== "template" ? "ok" : "bad"}">Drafting: ${esc(d.model)}</span>`;
+      `<span class="chip ${v.available ? "ok" : "bad"}">Vision · ${esc(v.model.replace("gemini-api:", ""))}</span>` +
+      `<span class="chip ${d.model !== "template" ? "ok" : "bad"}">Drafting · ${esc(d.model.replace("gemini-api:", ""))}</span>`;
   } catch {
     $("#status").innerHTML = `<span class="chip bad">Server unreachable</span>`;
+  }
+}
+
+/* ---------- summary tiles ---------- */
+function updateStats() {
+  const open = reports.filter((r) => r.kind && r.kind !== "clean");
+  $("#stat-review").textContent = open.filter((r) => r.status === "pending_review").length;
+  const approved = open.filter((r) => r.status === "approved").length;
+  $("#stat-approved").textContent = approved;
+  const p = lastPlan;
+  if (p && p.stops) {
+    $("#stat-approved-sub").textContent = `on ${p.routes.filter((r) => r.stop_ids.length).length} trucks`;
+    $("#stat-km").textContent = `${p.optimised_km} km`;
+    $("#stat-km-sub").textContent = `vs ${p.baseline_km} fixed`;
+    $("#stat-saved").textContent = `${p.saved_pct}%`;
+    $("#stat-saved-sub").textContent = `${p.saved_km} km shorter`;
+  } else {
+    $("#stat-approved-sub").textContent = "tickets";
+    $("#stat-km").textContent = "–";
+    $("#stat-km-sub").textContent = "approve tickets to plan";
+    $("#stat-saved").textContent = "–";
+    $("#stat-saved-sub").textContent = "vs fixed route";
   }
 }
 
@@ -70,11 +90,21 @@ async function initMap() {
     L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "sector-label", html: s.sector, iconSize: [24, 14], iconAnchor: [-4, 7] }), interactive: false }).addTo(grid);
   }
   L.marker([depot.lat, depot.lon], {
-    icon: L.divIcon({ className: "", html: `<div style="background:#17201b;color:#fff;border:2px solid #fff;border-radius:6px;padding:1px 6px;font-size:12px;font-weight:700;white-space:nowrap">DEPOT</div>`, iconSize: [56, 22], iconAnchor: [28, 11] }),
+    icon: L.divIcon({ className: "", html: `<div style="background:#10291f;color:#fff;border:3px solid #fff;border-radius:10px;padding:2px 10px;font-size:13px;font-weight:700;white-space:nowrap">DEPOT</div>`, iconSize: [70, 26], iconAnchor: [35, 13] }),
   }).bindPopup(esc(depot.name)).addTo(map);
   reportLayer = L.layerGroup().addTo(map);
   routeLayer = L.layerGroup().addTo(map);
   baseLayer = L.layerGroup();
+}
+
+function pinIcon(r, selected) {
+  const size = Math.round(28 + Math.min(r.score || 20, 100) / 8);
+  const label = r.score != null ? Math.round(r.score) : "?";
+  return L.divIcon({
+    className: "",
+    html: `<div class="pin${selected ? " sel" : ""}" style="width:${size}px;height:${size}px;background:${scoreHex(r)};font-size:${size > 36 ? 14 : 12}px">${label}</div>`,
+    iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+  });
 }
 
 function drawReports() {
@@ -82,8 +112,7 @@ function drawReports() {
   markers.clear();
   for (const r of reports) {
     if (r.status === "rejected" || r.status === "collected" || r.kind === "clean" || !r.kind) continue;
-    const radius = 6 + (r.score || 20) / 12;
-    const m = L.circleMarker([r.lat, r.lon], { radius, color: "#fff", weight: 2, fillColor: scoreHex(r), fillOpacity: .9 })
+    const m = L.marker([r.lat, r.lon], { icon: pinIcon(r, r.id === expandedId), keyboard: false })
       .bindTooltip(`#${r.id} · ${KIND[r.kind] || "?"} · score ${r.score ?? "–"}${r.synthetic ? " · synthetic" : ""}`)
       .on("click", () => focusTicket(r.id));
     m.addTo(reportLayer);
@@ -94,11 +123,29 @@ function drawReports() {
 /* ---------- tickets ---------- */
 function breakdownHtml(b) {
   if (!b) return "";
-  const parts = [["sev", b.severity, "severity"], ["age", b.age, "age"], ["rep", b.repeats, "repeats nearby"], ["site", b.site, "site"]];
+  const parts = [["sev", b.severity], ["age", b.age], ["rep", b.repeats], ["site", b.site]];
   return `<div class="breakdown">
     <div class="bar" aria-hidden="true">${parts.map(([k, v]) => `<i class="b-${k}" style="width:${v}%"></i>`).join("")}</div>
-    Severity ${b.severity} + age ${b.age} + repeats ${b.repeats} (${b.repeat_count} nearby) + site ${b.site} (${esc(b.site_reason)}) = <b>${b.total}</b>/100
+    Severity ${b.severity} + age ${b.age} + repeats ${b.repeats} (${b.repeat_count} nearby) + site ${b.site} (${esc(b.site_reason)}) = <b>${b.total}</b> of 100
   </div>`;
+}
+
+function statusPill(r) {
+  return r.status === "pending_review" ? `<span class="pill review">Review</span>` : `<span class="pill">${esc(r.status.replace("_", " "))}</span>`;
+}
+
+function compactHtml(r) {
+  const needs = r.vision_status !== "ok";
+  const title = r.kind ? `${esc(KIND[r.kind])} · Sector ${r.sector}` : `Sector ${r.sector} · needs a human look`;
+  const sub = r.kind
+    ? `${esc(WASTE[r.waste_type] || r.waste_type)} · severity ${r.severity}${r.synthetic ? " · synthetic" : ""}`
+    : "The model's answer could not be validated";
+  const box = needs
+    ? `<div class="score" style="background:#e4def9;color:#3a2fa3">?</div>`
+    : `<div class="score" style="background:${scoreHex(r)}">${r.score != null ? Math.round(r.score) : "–"}</div>`;
+  return `<button type="button" class="ticket compact${needs ? " review-needed" : ""}" id="t-${r.id}" data-id="${r.id}" data-expand aria-label="Open ticket ${r.id}">
+    ${box}<div class="c-main"><div class="ttitle">${title}</div><div class="meta">${sub}</div></div>${statusPill(r)}
+  </button>`;
 }
 
 function ticketHtml(r) {
@@ -108,42 +155,50 @@ function ticketHtml(r) {
     r.synthetic ? `<span class="pill synth">synthetic</span>` : "",
     review ? `<span class="pill review">needs human review</span>` : "",
     r.image_blurred ? `<span class="pill blur">photo blurred (privacy)</span>` : "",
-    `<span class="pill">${esc(r.status.replace("_", " "))}</span>`,
+    statusPill(r),
   ].join("");
-  const scoreBox = `<div class="score" style="background:${scoreColor(r)}">${r.score ?? "–"}<small>score</small></div>`;
+  const scoreBox = `<div class="score" style="background:${scoreHex(r)}">${r.score != null ? Math.round(r.score) : "–"}<small>score</small></div>`;
   const thumb = r.has_image ? `<img class="thumb" loading="lazy" src="/api/reports/${r.id}/image" alt="Reported photo #${r.id}">` : "";
   const facts = r.kind
-    ? `${esc(KIND[r.kind])} · ${esc(WASTE[r.waste_type] || r.waste_type)} · severity ${r.severity}/5 · confidence ${Math.round((r.confidence || 0) * 100)}%`
+    ? `${esc(WASTE[r.waste_type] || r.waste_type)} · severity ${r.severity} of 5 · confidence ${Math.round((r.confidence || 0) * 100)}%`
     : `Model could not analyse this photo${r.vision_error ? `: ${esc(r.vision_error.slice(0, 120))}` : ""}`;
-  const body = pending && r.ticket_title
-    ? `<input class="t-title" value="${esc(r.ticket_title)}" maxlength="120" aria-label="Ticket title">
-       <textarea class="t-body" maxlength="1200" aria-label="Ticket text">${esc(r.ticket_body)}</textarea>`
-    : r.ticket_title ? `<div class="ttitle">${esc(r.ticket_title)}</div><div class="body">${esc(r.ticket_body)}</div>` : "";
+  const draft = pending && r.ticket_title
+    ? `<div class="draft"><div class="draft-label">Draft ticket · edit before approving</div>
+        <input class="t-title" value="${esc(r.ticket_title)}" maxlength="120" aria-label="Ticket title">
+        <textarea class="t-body" maxlength="1200" aria-label="Ticket text">${esc(r.ticket_body)}</textarea></div>`
+    : r.ticket_title ? `<div class="draft"><div class="ttitle">${esc(r.ticket_title)}</div><div class="body">${esc(r.ticket_body)}</div></div>` : "";
   const actions = pending ? `<div class="actions">
-      ${r.ticket_title ? `<button class="primary" data-act="approve">Approve</button>` : ""}
-      <button data-act="reject">Reject</button>
+      ${r.ticket_title ? `<button type="button" class="primary" data-act="approve">Approve</button>` : ""}
+      <button type="button" data-act="reject">Reject</button>
       ${r.kind && r.kind !== "clean" ? `<select data-act="lang" aria-label="Redraft in language">
         <option value="">Redraft in…</option><option value="en">English</option><option value="hi">हिन्दी</option><option value="pa">ਪੰਜਾਬੀ</option></select>` : ""}
-    </div>` : r.status === "approved" ? `<div class="actions"><button data-act="collected">Mark collected</button></div>` : "";
-  return `<article class="ticket" id="t-${r.id}" data-id="${r.id}">
-    <div class="thead">${scoreBox}<div style="flex:1;min-width:0">
-      <div class="ttitle">#${r.id} · Sector ${r.sector}</div>
+    </div>` : r.status === "approved" ? `<div class="actions"><button type="button" data-act="collected">Mark collected</button></div>` : "";
+  return `<article class="ticket open" id="t-${r.id}" data-id="${r.id}">
+    <div class="thead">${scoreBox}<div class="c-main">
+      <div class="ttitle">${r.kind ? esc(KIND[r.kind]) : "Needs a human look"} · Sector ${r.sector}</div>
       <div class="meta">${pills}</div>
       <div class="meta">${facts}</div>
-      ${r.reason ? `<div class="meta">“${esc(r.reason)}”</div>` : ""}
-      <div class="meta">Vision: ${esc(r.vision_model || "–")}${r.ticket_model ? ` · Draft: ${esc(r.ticket_model)}` : ""}${r.reviewed_by ? ` · Reviewed by ${esc(r.reviewed_by)}` : ""}</div>
+      ${r.reason ? `<div class="meta reason">“${esc(r.reason)}”</div>` : ""}
+      <div class="meta">#${r.id} · Vision: ${esc((r.vision_model || "–").replace("gemini-api:", ""))}${r.ticket_model ? ` · Draft: ${esc(r.ticket_model.replace("gemini-api:", ""))}` : ""}${r.reviewed_by ? ` · Reviewed by ${esc(r.reviewed_by)}` : ""}</div>
     </div>${thumb}</div>
     ${breakdownHtml(r.score_breakdown)}
-    ${body}
+    ${draft}
     ${actions}
   </article>`;
 }
 
+function visibleList() {
+  return reports.filter((r) => filter === "all" || r.status === filter);
+}
+
 function drawTickets() {
-  const list = reports.filter((r) => filter === "all" || r.status === filter);
-  $("#tickets").innerHTML = list.length ? list.map(ticketHtml).join("") :
-    `<div class="empty">${filter === "pending_review" ? "No tickets waiting for review. New citizen reports will appear here." :
-      filter === "approved" ? "No approved tickets. Approve tickets to plan routes." : "No reports yet."}</div>`;
+  const list = visibleList();
+  if (!list.some((r) => r.id === expandedId)) expandedId = list.length ? list[0].id : null;
+  $("#tickets").innerHTML = list.length
+    ? list.map((r) => (r.id === expandedId ? ticketHtml(r) : compactHtml(r))).join("")
+    : `<div class="empty">${filter === "pending_review" ? "No tickets waiting for review. New citizen reports will appear here." :
+        filter === "approved" ? "No approved tickets. Approve tickets to plan routes." : "No reports yet."}</div>`;
+  if (reportLayer) markers.forEach((m, id) => { const r = reports.find((x) => x.id === id); if (r) m.setIcon(pinIcon(r, id === expandedId)); });
 }
 
 async function refresh() {
@@ -151,19 +206,22 @@ async function refresh() {
     reports = await api("/api/reports");
     drawReports();
     drawTickets();
+    updateStats();
   } catch (e) {
     $("#tickets").innerHTML = `<div class="empty">Could not load tickets: ${esc(e.message)}</div>`;
   }
 }
 
-function focusTicket(id) {
+function focusTicket(id, scroll = true) {
   const r = reports.find((x) => x.id === id);
-  if (r && filter !== "all" && r.status !== filter) { setFilter("all"); }
+  if (!r) return;
+  if (filter !== "all" && r.status !== filter) { filter = "all"; document.querySelectorAll(".filters button").forEach((b) => b.classList.toggle("on", b.dataset.f === "all")); }
+  expandedId = id;
+  drawTickets();
   const el = $(`#t-${id}`);
   if (!el) return;
-  document.querySelectorAll(".ticket.focus").forEach((t) => t.classList.remove("focus"));
   el.classList.add("focus");
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (scroll) el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function setFilter(f) {
@@ -180,6 +238,8 @@ function official() {
 }
 
 $("#tickets").addEventListener("click", async (ev) => {
+  const open = ev.target.closest("[data-expand]");
+  if (open) { focusTicket(Number(open.dataset.id), false); return; }
   const btn = ev.target.closest("button[data-act]");
   if (!btn) return;
   const card = btn.closest(".ticket"), id = card.dataset.id, act = btn.dataset.act;
@@ -194,8 +254,9 @@ $("#tickets").addEventListener("click", async (ev) => {
     } else if (act === "collected") {
       await api(`/api/reports/${id}/collected`, { method: "POST" });
     }
+    expandedId = null;
     await refresh();
-    if (lastPlan) await plan();
+    await plan();
   } catch (e) {
     alert(e.message);
     btn.disabled = false;
@@ -219,7 +280,12 @@ $("#tickets").addEventListener("change", async (ev) => {
 
 document.querySelectorAll(".filters button").forEach((b) => b.addEventListener("click", () => setFilter(b.dataset.f)));
 
-/* ---------- report form ---------- */
+/* ---------- report dialog ---------- */
+const dlg = $("#reportDialog");
+$("#openReport").addEventListener("click", () => { dlg.showModal(); });
+$("#closeReport").addEventListener("click", () => dlg.close());
+dlg.addEventListener("click", (ev) => { if (ev.target === dlg) dlg.close(); });
+
 $("#photo").addEventListener("change", () => {
   const f = $("#photo").files[0];
   if (!f) return;
@@ -263,7 +329,7 @@ $("#reportForm").addEventListener("submit", async (ev) => {
     await refresh();
     setFilter("pending_review");
     if (markers.has(r.id)) map.flyTo(markers.get(r.id).getLatLng(), 15);
-    focusTicket(r.id);
+    focusTicket(r.id, false);
   } catch (e) {
     clearInterval(tick);
     msg.textContent = e.message;
@@ -276,20 +342,22 @@ $("#reportForm").addEventListener("submit", async (ev) => {
 function showResult(r) {
   const box = $("#result");
   box.hidden = false;
+  const done = `<div class="actions"><button type="button" class="primary" id="viewTicket">View ticket</button></div>`;
   if (r.vision_status !== "ok") {
-    box.innerHTML = `<h3>Sent for human review</h3><p class="hint">The model's answer could not be validated, so an official will classify this photo manually. Nothing is lost.</p>`;
-    return;
+    box.innerHTML = `<h3>Sent for human review</h3><p class="hint">The model's answer could not be validated, so an official will classify this photo manually. Nothing is lost.</p>${done}`;
+  } else {
+    box.innerHTML = `<h3>What the model saw</h3>
+      <dl class="kv">
+        <dt>Type</dt><dd>${esc(KIND[r.kind])}</dd>
+        <dt>Material</dt><dd>${esc(WASTE[r.waste_type])}</dd>
+        <dt>Severity</dt><dd>${r.severity} of 5</dd>
+        <dt>Confidence</dt><dd>${Math.round(r.confidence * 100)}%</dd>
+        <dt>Why</dt><dd>${esc(r.reason)}</dd>
+        ${r.score != null ? `<dt>Score</dt><dd>${r.score} of 100</dd>` : ""}
+        ${r.image_blurred ? `<dt>Privacy</dt><dd>Face or number plate detected: only a blurred copy was kept.</dd>` : ""}
+      </dl>${done}`;
   }
-  box.innerHTML = `<h3>What the model saw</h3>
-    <dl class="kv">
-      <dt>Type</dt><dd>${esc(KIND[r.kind])}</dd>
-      <dt>Material</dt><dd>${esc(WASTE[r.waste_type])}</dd>
-      <dt>Severity</dt><dd>${r.severity}/5</dd>
-      <dt>Confidence</dt><dd>${Math.round(r.confidence * 100)}%</dd>
-      <dt>Why</dt><dd>${esc(r.reason)}</dd>
-      ${r.score != null ? `<dt>Score</dt><dd>${r.score}/100</dd>` : ""}
-      ${r.image_blurred ? `<dt>Privacy</dt><dd>Face or number plate detected: only a blurred copy was kept.</dd>` : ""}
-    </dl>`;
+  $("#viewTicket").addEventListener("click", () => { dlg.close(); focusTicket(r.id); });
 }
 
 /* ---------- routes ---------- */
@@ -317,20 +385,17 @@ async function plan() {
   try {
     const p = await api("/api/routes/plan", { method: "POST" });
     lastPlan = p;
-    box.hidden = false;
-    if (!p.stops) { routeLayer.clearLayers(); baseLayer.clearLayers(); box.innerHTML = `<div class="empty" style="grid-column:1/-1">${esc(p.note)}</div>`; return; }
+    updateStats();
+    if (!p.stops) { routeLayer?.clearLayers(); baseLayer?.clearLayers(); box.hidden = false; box.innerHTML = `<div class="empty">${esc(p.note)}</div>`; return; }
     drawPlan(p);
+    box.hidden = false;
     box.innerHTML = `
-      <div class="stat"><b>${p.stops}</b><span>approved tickets routed</span></div>
-      <div class="stat"><b>${p.optimised_km} km</b><span>optimised (OR-Tools)</span></div>
-      <div class="stat"><b>${p.baseline_km} km</b><span>naive fixed order</span></div>
-      <div class="stat sim"><b>${p.saved_pct}%</b><span>shorter · ${p.saved_km} km saved</span></div>
-      <div class="trucks">${p.routes.map((r, i) => `<span style="background:${TRUCK_COLORS[i % TRUCK_COLORS.length]}">${esc(r.truck)}: ${r.stop_ids.length} stops · load ${r.load}/${r.capacity} · ${r.distance_km} km</span>`).join("")}</div>
-      ${p.dropped.length ? `<div class="simnote">Fleet capacity exceeded: lowest-score tickets ${p.dropped.map((d) => "#" + d).join(", ")} wait for the next run.</div>` : ""}
-      <div class="simnote"><b>SIMULATION.</b> ${esc(p.note)} Baseline visits the same stops in sector-number order.</div>`;
+      <div class="trucks">${p.routes.map((r, i) => `<div class="truck" style="border-left-color:${TRUCK_COLORS[i % TRUCK_COLORS.length]}"><b>Truck ${esc(r.truck)} · ${r.stop_ids.length} stops</b><span>Load ${r.load} of ${r.capacity} · ${r.distance_km} km</span></div>`).join("")}</div>
+      ${p.dropped.length ? `<div class="simnote">Fleet is full: the lowest-score tickets ${p.dropped.map((d) => "#" + d).join(", ")} wait for the next run.</div>` : ""}
+      <div class="simnote"><b>Simulation.</b> ${esc(p.note)} The fixed route visits the same stops in sector-number order.</div>`;
   } catch (e) {
     box.hidden = false;
-    box.innerHTML = `<div class="empty" style="grid-column:1/-1">Route planning failed: ${esc(e.message)}</div>`;
+    box.innerHTML = `<div class="empty">Route planning failed: ${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
   }
@@ -344,7 +409,6 @@ $("#showBase").addEventListener("change", (e) => { if (e.target.checked) baseLay
   loadStatus();
   try { await initMap(); } catch (e) { $("#map").innerHTML = `<div class="empty">Map unavailable: ${esc(e.message)}</div>`; }
   await refresh();
-  // Deep links for demos/screenshots: #plan plans routes on load, #base also shows the naive route.
   if (location.hash.includes("base")) $("#showBase").checked = true;
-  if (location.hash.includes("plan")) await plan();
+  await plan(); // routes for already-approved tickets are drawn on load
 })();
