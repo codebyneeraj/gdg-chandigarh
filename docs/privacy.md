@@ -8,9 +8,9 @@ a human in charge of every decision.
 | Data | Stored? | Notes |
 |---|---|---|
 | Photo | Yes, re-encoded JPEG (max 1024 px) | Every upload is decoded and re-encoded from pixels, which removes **all EXIF metadata, including GPS coordinates, camera model and timestamps**. Tested in `tests/test_pipeline.py::test_normalise_strips_exif_and_resizes`. |
-| Photo with a visible face or number plate | Only a heavily blurred 320 px copy | The vision model sets `privacy_flag` when it sees a recognisable face or readable plate. The sharp image is then discarded before anything is written to disk (`tests/test_api.py::test_privacy_flag_blurs_stored_image`). |
+| Photo with a visible face or number plate | Sharp photo kept for the reporter and officials; the public city view shows a heavily blurred 320 px copy | The vision model sets `privacy_flag` when it sees a recognisable face or readable plate. The sharp EXIF-stripped photo stays on the server, and `citizen/server.py` blurs it on the fly for the public view (`tests/test_api.py::test_privacy_flag_keeps_sharp_photo_and_marks_it`). |
 | Sector | Yes | Chosen by the reporter. |
-| GPS location | Only if the reporter ticks "Attach my GPS location" | Location outside Chandigarh is ignored. Without GPS we place the report near the sector centre. |
+| GPS location | Only if the reporter ticks "Attach my GPS location" | Location outside Chandigarh is ignored. Without GPS we place the report near the sector centre. With GPS on, the form pre-selects the nearest sector (changeable), and an official sees a warning if the pin and the chosen sector disagree. |
 | Name, phone, email, account, device ID | **No** | Reports are anonymous. |
 | IP address | Not stored | Kept only in memory, for at most 60 seconds, for rate limiting (6 uploads per minute per IP). |
 | Official's name | Yes | Recorded on approve/reject for accountability. |

@@ -1,7 +1,9 @@
 """SQLite storage. One table: a report and the ticket drafted from it.
 
 Ticket lifecycle: pending_review -> approved -> collected, or pending_review -> rejected.
-Only a human action moves a ticket out of pending_review.
+Only a human action moves a ticket out of pending_review. A reporter can also add their report to an
+existing open ticket of the same spot: it becomes 'merged' (merged_into = that ticket's id) and only
+counts towards the ticket's report counter, never towards its score or routing.
 """
 
 from __future__ import annotations
@@ -39,13 +41,14 @@ CREATE TABLE IF NOT EXISTS reports (
     reviewed_by     TEXT,
     reviewed_at     TEXT,
     review_note     TEXT,
-    collected_at    TEXT
+    collected_at    TEXT,
+    merged_into     INTEGER                     -- parent ticket id when status = 'merged'
 );
 """
 
 COLUMNS = ["created_at", "sector", "lat", "lon", "gps_from_user", "image_file", "image_blurred", "synthetic",
            "vision_status", "vision_model", "vision_error", "waste_type", "kind", "severity", "confidence",
-           "reason", "ticket_lang", "ticket_title", "ticket_body", "ticket_model", "status"]
+           "reason", "ticket_lang", "ticket_title", "ticket_body", "ticket_model", "status", "merged_into"]
 
 
 def now_iso() -> str:
@@ -58,6 +61,8 @@ class DB:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.conn() as c:
             c.executescript(SCHEMA)
+            if "merged_into" not in {r["name"] for r in c.execute("PRAGMA table_info(reports)")}:
+                c.execute("ALTER TABLE reports ADD COLUMN merged_into INTEGER")  # database made before this column existed
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:

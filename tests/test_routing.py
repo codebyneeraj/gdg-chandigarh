@@ -82,3 +82,57 @@ def test_optimised_beats_naive_on_demo_like_load():
     for seed in range(5):
         res = routing.compare(DEPOT, trucks, make_stops(16, seed=seed, load=(1, 8)))
         assert res["optimised"].total_distance_m <= res["baseline"].total_distance_m
+
+
+def _fake_osrm(monkeypatch, fail=False):
+    """Stand-in for the OSRM /table call: 2x the straight-line distance."""
+    calls = []
+
+    class Resp:
+        def __init__(self, pts):
+            self.pts = pts
+
+        def raise_for_status(self):
+            if fail:
+                raise RuntimeError("503")
+
+        def json(self):
+            from saafroute.scoring import haversine_m
+            return {"code": "Ok", "distances": [[haversine_m(a[0], a[1], b[0], b[1]) * 2 for b in self.pts]
+                                                for a in self.pts]}
+
+    def get(url, params=None, timeout=None):
+        coords = url.split("/driving/")[1].split(";")
+        calls.append(url)
+        return Resp([tuple(map(float, c.split(",")))[::-1] for c in coords])
+
+    monkeypatch.setattr(routing.httpx, "get", get)
+    monkeypatch.setenv("SAAFROUTE_OSRM_URL", "http://osrm.test")
+    return calls
+
+
+def test_osrm_matrix_used_and_cached(monkeypatch):
+    calls = _fake_osrm(monkeypatch)
+    pts = [(DEPOT.lat, DEPOT.lon), (30.71, 76.80), (30.72, 76.79)]
+    m, src = routing.distance_matrix_with_source(pts)
+    assert src == "osrm" and m[0][0] == 0 and m[0][1] > 0
+    routing.distance_matrix_with_source(pts)
+    assert len(calls) == 1  # second call served from cache
+
+
+def test_falls_back_to_haversine_when_osrm_fails(monkeypatch):
+    calls = _fake_osrm(monkeypatch, fail=True)
+    pts = [(DEPOT.lat, DEPOT.lon), (30.71, 76.80)]
+    m, src = routing.distance_matrix_with_source(pts)
+    assert src == "haversine" and m[0][1] > 0
+    routing.distance_matrix_with_source(pts)
+    assert len(calls) == 1  # cooldown: no repeated slow attempts
+
+
+def test_compare_reports_source_and_uses_one_matrix(monkeypatch):
+    _fake_osrm(monkeypatch)
+    trucks = [Truck("A", 20), Truck("B", 20), Truck("C", 20)]
+    res = routing.compare(DEPOT, trucks, make_stops(10, load=(1, 4)))
+    assert res["source"] == "osrm" and res["optimised"].source == res["baseline"].source == "osrm"
+    assert "OpenStreetMap" in res["note"]
+    assert res["saved_m"] >= 0

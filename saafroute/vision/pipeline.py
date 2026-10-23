@@ -19,6 +19,7 @@ from ..schemas import AnalysisResult, PhotoAnalysis
 from . import VisionModel
 
 MAX_SIDE = 1024
+Image.MAX_IMAGE_PIXELS = 40_000_000  # decompression-bomb guard: Pillow raises above 2x this
 
 PROMPT = """You are inspecting a citizen photo for a municipal solid-waste team in India.
 Return ONLY a JSON object with exactly these keys:
@@ -43,10 +44,12 @@ def normalise_image(data: bytes) -> bytes:
     """Decode, auto-rotate, downscale and re-encode as JPEG.
 
     Re-encoding from pixels drops all EXIF/GPS metadata. Raises ValueError if the
-    bytes are not a decodable image.
+    bytes are not a decodable image or exceed the pixel limit.
     """
     try:
         img = Image.open(io.BytesIO(data))
+        if img.width * img.height > Image.MAX_IMAGE_PIXELS:
+            raise ValueError('image has too many pixels')
         img = ImageOps.exif_transpose(img)
         img = img.convert("RGB")
     except Exception as exc:  # Pillow raises many types for bad input

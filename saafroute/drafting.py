@@ -9,12 +9,15 @@ always exists for the official to review. Nothing is dispatched without approval
 from __future__ import annotations
 
 import json
+import logging
 from typing import Protocol
 
 from pydantic import ValidationError
 
 from .config import DraftingConfig
 from .schemas import Lang, TicketDraft
+
+log = logging.getLogger(__name__)
 
 LANG_NAMES = {"en": "English", "hi": "Hindi (Devanagari script)", "pa": "Punjabi (Gurmukhi script)"}
 
@@ -135,30 +138,61 @@ class GeminiDrafter:
         raise RuntimeError(f"drafting failed: {last}")
 
 
-class FallbackDrafter:
-    """Try Gemini; on any failure use the template so a ticket always exists."""
+class GroqDrafter:
+    """Last-resort model (Groq free tier) used when every Gemini model has failed."""
 
-    def __init__(self, primary: Drafter | None) -> None:
+    def __init__(self, model: str, api_key: str, timeout_s: float) -> None:
+        from .groq_client import GroqClient
+
+        self.model = model
+        self.name = f"groq:{model}"
+        self.client = GroqClient(api_key, timeout_s)
+
+    def draft(self, lang: Lang, facts: dict) -> TicketDraft:
+        base = DRAFT_PROMPT.format(lang_name=LANG_NAMES[lang], facts=json.dumps(facts, ensure_ascii=False))
+        prompt = base + f"\nReturn only JSON matching this schema: {json.dumps(TicketDraft.model_json_schema())}"
+        last: Exception | None = None
+        for _ in range(2):  # one retry for invalid output
+            try:
+                return TicketDraft.model_validate_json(
+                    self.client.chat(self.model, [{"role": "user", "content": prompt}],
+                                     temperature=0.2, json_mode=True))
+            except (ValidationError, ValueError) as exc:
+                last = exc
+                prompt = base + f"\nYour previous answer was invalid ({str(exc)[:200]}). Return only valid JSON."
+        raise RuntimeError(f"groq drafting failed: {last}")
+
+
+class FallbackDrafter:
+    """Try Gemini, then Groq if configured; on any failure use the template so a ticket always exists."""
+
+    def __init__(self, primary: Drafter | None, secondary: Drafter | None = None) -> None:
         self.primary = primary
+        self.secondary = secondary
         self.last_used = "template"
 
     @property
     def name(self) -> str:
-        return self.primary.name if self.primary else "template"
+        first = self.primary or self.secondary
+        return first.name if first else "template"
 
     def draft(self, lang: Lang, facts: dict) -> TicketDraft:
-        if self.primary:
+        for drafter in (self.primary, self.secondary):
+            if drafter is None:
+                continue
             try:
-                d = self.primary.draft(lang, facts)
-                self.last_used = self.primary.name
+                d = drafter.draft(lang, facts)
+                self.last_used = drafter.name
                 return d
-            except Exception:
-                pass
+            except Exception as exc:
+                log.warning('Drafting with %s failed, trying next option: %s', drafter.name, exc)
         self.last_used = "template"
         return template_draft(lang, facts)
 
 
-def build_drafter(cfg: DraftingConfig, api_key: str | None) -> FallbackDrafter:
-    if cfg.provider == "gemini" and api_key:
-        return FallbackDrafter(GeminiDrafter(cfg.models, api_key, cfg.timeout_s))
-    return FallbackDrafter(None)
+def build_drafter(cfg: DraftingConfig, api_key: str | None, groq_api_key: str | None = None) -> FallbackDrafter:
+    if cfg.provider != "gemini":
+        return FallbackDrafter(None)
+    primary = GeminiDrafter(cfg.models, api_key, cfg.timeout_s) if api_key else None
+    secondary = GroqDrafter(cfg.groq_model, groq_api_key, cfg.timeout_s) if groq_api_key and cfg.groq_model else None
+    return FallbackDrafter(primary, secondary)

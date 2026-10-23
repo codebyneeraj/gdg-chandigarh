@@ -106,14 +106,15 @@
         <select id="sector" name="sector" required></select>
       </label>
       <label>Ticket language
-        <select id="lang" name="lang">
-          <option value="en">English</option>
+        <select id="lang" name="lang" autocomplete="off">
+          <option value="en" selected>English</option>
           <option value="hi">हिन्दी</option>
           <option value="pa">ਪੰਜਾਬੀ</option>
         </select>
       </label>
     </div>
     <label class="check"><input type="checkbox" id="useGps"> Attach my GPS location (optional)</label>
+    <p class="hint" id="gpsMsg" role="status"></p>
     <button type="submit" id="submitBtn" class="solid big">Analyse and create draft ticket</button>
     <p class="hint" id="formMsg" role="status"></p>
   </form>

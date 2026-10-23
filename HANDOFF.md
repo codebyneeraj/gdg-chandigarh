@@ -6,14 +6,14 @@ Nothing has been pushed to a remote, posted or submitted.
 ## What works (verified)
 - End-to-end on a real photo: upload → Gemma 4 JSON (schema-validated) → hotspot score → Gemini ticket in en/hi/pa → official approves → OR-Tools routes on the map.
 - Fallbacks: Gemma 4 26B → 31B (26B chosen by benchmark; 31B was mostly unavailable); invalid model output → one retry → "needs human review"; Gemini drafting chain → offline templates; `--offline` mode replays recorded Gemma outputs.
-- Upload safeguards: type and size limits (8 MB), image decode check, EXIF/GPS stripped, rate limit (6 per minute per IP), blurred-only storage when a face or plate is flagged.
+- Upload safeguards: type and size limits (8 MB), image decode check, EXIF/GPS stripped, rate limit (6 per minute per IP), when a face or plate is flagged the sharp photo is kept for the reporter/officials and the public city view serves a blurred copy.
 - 41 automated tests (all passing) (schema, pipeline retry/fallback, scoring, routing capacity/coverage/fairness, API flow, drafting fallback).
 - Dashboard on desktop, 1280×720 projector and a 390 px phone (no horizontal scroll), checked with headless-browser screenshots.
 - `python run_demo.py` from a fresh `git clone` in a new directory: created the venv, installed pinned deps, read the key from `.env`, seeded data, served; 41/41 tests passed there; route numbers identical.
 
 ## What is simulated / synthetic
 - Truck fleet (3 × 20 units), depot location, and the 24 seeded demo reports: **synthetic**, labelled in the UI.
-- Route savings: **simulation** on synthetic data, with straight-line × 1.3 distances (no road network).
+- Route savings: **simulation** on synthetic data, with OSRM road distances when reachable, else straight-line × 1.3 (the plan note says which).
 - Benchmark photos are from Wikimedia Commons (various countries), not Chandigarh.
 
 ## Known limits

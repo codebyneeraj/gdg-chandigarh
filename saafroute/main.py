@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import random
 import threading
 import time
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -19,14 +20,21 @@ from . import routing
 from .config import DATA_DIR, load_settings
 from .db import DB, now_iso
 from .drafting import build_drafter
-from .schemas import ApproveRequest, Lang, RedraftRequest, RejectRequest
-from .scoring import ReportPoint, count_repeats, hotspot_score
+from .schemas import AnalysisRequest, ApproveRequest, Lang, MergeRequest, RedraftRequest, RejectRequest, SectorRequest
+from .scoring import ReportPoint, count_repeats, haversine_m, hotspot_score
 from .vision import build_vision_model
-from .vision.pipeline import analyze_photo, normalise_image, privacy_blur
+from .vision.pipeline import analyze_photo, normalise_image
 
+log = logging.getLogger("saafroute")
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+CLEAN_MIN_CONFIDENCE = 0.6  # a "clean" verdict below this goes to human review instead of being dropped
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 RATE_LIMIT = (6, 60.0)  # uploads per window (seconds) per client IP
+SECTOR_MISMATCH_M = 1500  # a GPS pin further than this from the chosen sector's centre, and nearer another, is flagged
+SIMILAR_RADIUS_M = 100    # a new GPS report this close to an open ticket of the same kind may be "the same spot"
+SIMILAR_WINDOW = timedelta(days=7)
+SIMILAR_MAX = 3
+OPEN_STATES = ("pending_review", "approved")
 
 STATIC = Path(__file__).parent / "static"
 SECTORS = {s["sector"]: s for s in json.loads((DATA_DIR / "sectors.json").read_text(encoding="utf-8"))["sectors"]}
@@ -34,8 +42,8 @@ SECTORS = {s["sector"]: s for s in json.loads((DATA_DIR / "sectors.json").read_t
 settings = load_settings()
 settings.upload_dir.mkdir(parents=True, exist_ok=True)
 db = DB(settings.db_path)
-vision = build_vision_model(settings.vision, settings.gemini_api_key)
-drafter = build_drafter(settings.drafting, settings.gemini_api_key)
+vision = build_vision_model(settings.vision, settings.gemini_api_key, settings.groq_api_key)
+drafter = build_drafter(settings.drafting, settings.gemini_api_key, settings.groq_api_key)
 _vision_lock = threading.Semaphore(2)  # keep concurrent model calls (and API quota use) bounded
 
 app = FastAPI(title="SaafRoute", version="0.1.0")
@@ -67,22 +75,40 @@ def _location(sector: int, lat: float | None, lon: float | None, seed: str) -> t
     return c["lat"] + rnd.uniform(-0.002, 0.002), c["lon"] + rnd.uniform(-0.002, 0.002), False
 
 
+def _sector_check(row: dict) -> tuple[int | None, bool]:
+    """For a report whose pin came from the citizen's GPS: the sector the pin is nearest to, and whether
+    that contradicts the sector they chose. Pins placed from the chosen sector can never disagree."""
+    if not row["gps_from_user"] or row["sector"] not in SECTORS:
+        return None, False
+    nearest = min(SECTORS.values(), key=lambda s: haversine_m(row["lat"], row["lon"], s["lat"], s["lon"]))["sector"]
+    chosen = SECTORS[row["sector"]]
+    far = haversine_m(row["lat"], row["lon"], chosen["lat"], chosen["lon"]) > SECTOR_MISMATCH_M
+    return nearest, far and nearest != row["sector"]
+
+
 def _scored(rows: list[dict]) -> list[dict]:
     """Attach hotspot score + breakdown to every row with a usable analysis."""
     now = datetime.now(timezone.utc)
     points = [ReportPoint(r["id"], r["lat"], r["lon"], _parse_dt(r["created_at"]),
-                          r["status"] in ("pending_review", "approved") and (r["kind"] or "") != "clean")
+                          r["status"] in OPEN_STATES and (r["kind"] or "") != "clean")  # merged reports are not open
               for r in rows]
     by_id = {p.id: p for p in points}
+    merged_counts: dict[int, int] = {}
+    for r in rows:
+        if r["status"] == "merged" and r.get("merged_into"):
+            merged_counts[r["merged_into"]] = merged_counts.get(r["merged_into"], 0) + 1
     out = []
     for r in rows:
         r = dict(r)
-        if r["severity"] and r["kind"] != "clean":
+        # `report_count` is display-only: it is never an input to the score or to routing.
+        r["report_count"] = None if r["status"] == "merged" else 1 + merged_counts.get(r["id"], 0)
+        if r["status"] != "merged" and r["severity"] and r["kind"] != "clean":
             rep = count_repeats(by_id[r["id"]], points)
             b = hotspot_score(r["severity"], _parse_dt(r["created_at"]), now, rep, r["sector"])
             r["score"], r["score_breakdown"] = b.total, b.as_dict()
         else:
             r["score"], r["score_breakdown"] = None, None
+        r["nearest_sector"], r["sector_mismatch"] = _sector_check(r)
         r["has_image"] = bool(r["image_file"])
         r.pop("image_file", None)
         out.append(r)
@@ -137,8 +163,18 @@ def create_report(request: Request, photo: UploadFile = File(...), sector: int =
         result = analyze_photo(jpeg, vision)
     a = result.analysis
 
+    # Nothing to collect (e.g. a photo of a person): keep no photo and open no ticket.
+    # A low-confidence "clean" still goes to a human, so real waste is not silently dropped.
+    if a and a.kind.value == "clean" and a.confidence >= CLEAN_MIN_CONFIDENCE:
+        return JSONResponse(status_code=200, content={
+            "created": False, "kind": "clean", "waste_type": a.waste_type.value, "severity": a.severity,
+            "confidence": a.confidence, "reason": a.reason, "vision_model": result.model,
+            "message": "No waste detected in this photo, so no ticket was created. The photo was not kept."})
+
+    # The sharp photo is kept for the reporter and officials; `image_blurred` records that a face or
+    # plate was flagged, and the public city view then serves a blurred copy (see citizen/server.py).
     blurred = bool(a and a.privacy_flag)
-    stored = privacy_blur(jpeg) if blurred else jpeg
+    stored = jpeg
     fname = hashlib.sha256(stored).hexdigest()[:24] + ".jpg"
     (settings.upload_dir / fname).write_bytes(stored)
 
@@ -154,7 +190,36 @@ def create_report(request: Request, photo: UploadFile = File(...), sector: int =
     if a and a.kind.value != "clean":
         d = drafter.draft(lang, _facts(db.get(rid)))
         db.update(rid, ticket_lang=lang, ticket_title=d.title, ticket_body=d.body, ticket_model=drafter.last_used)
-    return next(r for r in _scored(db.all()) if r["id"] == rid)
+    rows = _scored(db.all())
+    new = next(r for r in rows if r["id"] == rid)
+    return {**new, "similar": _similar_open(new, rows)}
+
+
+def _similar_open(new: dict, rows: list[dict]) -> list[dict]:
+    """Open tickets of the same kind that this report may be a repeat of: within 100 m when the new report
+    has a GPS pin, else in the same sector; created in the last 7 days. Only a suggestion: the reporter
+    decides, and nothing is merged automatically. Demo (synthetic) tickets are never suggested."""
+    if not new["kind"] or new["kind"] == "clean":
+        return []
+    now = _parse_dt(new["created_at"])
+    found = []
+    for r in rows:
+        if (r["id"] == new["id"] or r["status"] not in OPEN_STATES or r["kind"] != new["kind"] or r["synthetic"]
+                or now - _parse_dt(r["created_at"]) > SIMILAR_WINDOW):
+            continue
+        if new["gps_from_user"]:
+            dist = haversine_m(new["lat"], new["lon"], r["lat"], r["lon"])
+            if dist > SIMILAR_RADIUS_M:
+                continue
+        elif r["sector"] == new["sector"]:
+            dist = None
+        else:
+            continue
+        found.append({"id": r["id"], "sector": r["sector"], "kind": r["kind"], "title": r["ticket_title"],
+                      "created_at": r["created_at"], "status": r["status"], "report_count": r["report_count"],
+                      "distance_m": None if dist is None else round(dist)})
+    found.sort(key=lambda s: (s["distance_m"] is None, s["distance_m"] or 0, -s["id"]))
+    return found[:SIMILAR_MAX]
 
 
 @app.get("/api/reports")
@@ -183,11 +248,63 @@ def _require(rid: int, *states: str) -> dict:
     return row
 
 
+@app.post("/api/reports/{rid}/analysis")
+def set_analysis(rid: int, body: AnalysisRequest) -> dict:
+    """An official fills in kind/material/severity when the model gave none (or said 'clean');
+    the report is then scored and a ticket drafted so it can be approved."""
+    row = _require(rid, "pending_review")
+    db.update(rid, kind=body.kind.value, waste_type=body.waste_type.value, severity=body.severity,
+              confidence=1.0, reason=f"Set manually by {body.official}.")
+    if body.kind.value != "clean":
+        d = drafter.draft(body.lang, _facts(db.get(rid)))
+        db.update(rid, ticket_lang=body.lang, ticket_title=d.title, ticket_body=d.body, ticket_model=drafter.last_used)
+    return next(r for r in _scored(db.all()) if r["id"] == rid)
+
+
+@app.post("/api/reports/{rid}/sector")
+def set_sector(rid: int, body: SectorRequest) -> dict:
+    """An official corrects the sector (e.g. the citizen picked the wrong one). A pin that came from
+    the citizen's GPS is kept; a pin placed from the old sector's centre moves to the new one."""
+    row = _require(rid, "pending_review", "approved")
+    if body.sector not in SECTORS:
+        raise HTTPException(422, f"Unknown Chandigarh sector: {body.sector}")
+    changes: dict = {"sector": body.sector, "review_note": f"Sector {row['sector']} changed to {body.sector} by {body.official}."}
+    if not row["gps_from_user"]:
+        changes["lat"], changes["lon"], _ = _location(body.sector, None, None, row["image_file"])
+    db.update(rid, **changes)
+    if row["status"] == "pending_review" and row["kind"] and row["kind"] != "clean" and row["ticket_title"]:
+        d = drafter.draft(row["ticket_lang"] or "en", _facts(db.get(rid)))  # the ticket text names the sector
+        db.update(rid, ticket_title=d.title, ticket_body=d.body, ticket_model=drafter.last_used)
+    return next(r for r in _scored(db.all()) if r["id"] == rid)
+
+
+@app.post("/api/reports/{rid}/merge")
+def merge(rid: int, body: MergeRequest) -> dict:
+    """The reporter says their report is the same spot as an open ticket. The report is kept (with its
+    photo) but becomes 'merged': it only raises that ticket's report counter. The counter never feeds the
+    hotspot score or routing, and the merged report is no longer a ticket of its own."""
+    row = _require(rid, "pending_review")
+    if not row["kind"] or row["kind"] == "clean":
+        raise HTTPException(409, "Only a report with an analysis can be added to another ticket")
+    if body.into == rid:
+        raise HTTPException(422, "A report cannot be added to itself")
+    target = db.get(body.into)
+    if not target:
+        raise HTTPException(404, "Ticket to add to was not found")
+    if target["status"] not in OPEN_STATES:
+        raise HTTPException(409, f"Ticket #{body.into} is '{target['status']}', so it cannot take more reports")
+    if target["kind"] != row["kind"]:
+        raise HTTPException(409, "That ticket is a different kind of waste")
+    db.update(rid, status="merged", merged_into=body.into,
+              review_note=f"Added to ticket #{body.into} by the reporter as the same spot.")
+    return next(r for r in _scored(db.all()) if r["id"] == body.into)
+
+
 @app.post("/api/reports/{rid}/approve")
 def approve(rid: int, body: ApproveRequest) -> dict:
     row = _require(rid, "pending_review")
     if not row["kind"] or row["kind"] == "clean":
-        raise HTTPException(409, "Nothing to collect: set the analysis manually or reject the report")
+        raise HTTPException(409, "Nothing to collect: set the analysis manually (Set analysis) or reject the report")
     db.update(rid, status="approved", reviewed_by=body.official, reviewed_at=now_iso(),
               ticket_title=body.title or row["ticket_title"], ticket_body=body.body or row["ticket_body"])
     return {"ok": True}
@@ -243,12 +360,14 @@ def plan_routes() -> dict:
         "baseline_km": routing.km(res["baseline"].total_distance_m),
         "saved_km": routing.km(res["saved_m"]),
         "saved_pct": res["saved_pct"],
+        "distance_source": res["source"],
         "note": res["note"],
     }
 
 
 @app.exception_handler(Exception)
 async def unhandled(request: Request, exc: Exception) -> JSONResponse:
+    log.error("Unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse(status_code=500, content={"detail": "Something went wrong on the server. Please try again."})
 
 

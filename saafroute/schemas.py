@@ -78,6 +78,23 @@ class RejectRequest(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 
 
+class AnalysisRequest(BaseModel):
+    official: str = Field(min_length=2, max_length=60)
+    kind: Kind
+    waste_type: WasteType
+    severity: int = Field(ge=1, le=5)
+    lang: Lang = "en"
+
+
+class SectorRequest(BaseModel):
+    official: str = Field(min_length=2, max_length=60)
+    sector: int
+
+
+class MergeRequest(BaseModel):
+    into: int
+
+
 class RedraftRequest(BaseModel):
     lang: Lang
 

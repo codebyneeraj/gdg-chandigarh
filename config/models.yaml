@@ -10,6 +10,10 @@ vision:
   # 26B first: in our benchmark 31B failed with server errors on 27 of 29 calls (docs/model-selection.md).
   hosted_models: [gemma-4-26b-a4b-it, gemma-4-31b-it]
   timeout_s: 120
+  # Last resort after every Gemini model failed. Active only when GROQ_API_KEY is set. Groq changes its
+  # model list often (list yours: GET https://api.groq.com/openai/v1/models) and override with GROQ_VISION_MODEL.
+  # Verified 2026-10-23 with a real call: qwen/qwen3.8-27b accepts images; the gpt-oss models are text-only.
+  groq_model: qwen/qwen3.8-27b
   ollama_model: gemma4:e4b
   ollama_url: http://localhost:11434
 
@@ -21,3 +25,6 @@ drafting:
   # 20 requests/day when we tested), so the higher-quota Flash-Lite models come first.
   models: [gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash]
   timeout_s: 30
+  # Tried after all Gemini models fail, before the offline template. Active only when GROQ_API_KEY is set.
+  # Verified 2026-10-23: valid en/hi tickets from openai/gpt-oss-120b.
+  groq_model: openai/gpt-oss-120b

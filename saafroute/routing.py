@@ -1,9 +1,11 @@
 """Capacitated vehicle routing (OR-Tools) plus a naive fixed-order baseline.
 
-Distances: straight-line (haversine) x ROAD_FACTOR. Chandigarh's roads form a
-grid, and on a grid the average ratio of travel to straight-line distance is
-4/pi ~ 1.27, so we use 1.3. This is an approximation; a road-network matrix
-(e.g. OSRM on OpenStreetMap) can be dropped into `distance_matrix` later.
+Distances: real driving distances from OSRM (OpenStreetMap road network) when
+the server answers. Otherwise straight-line (haversine) x ROAD_FACTOR:
+Chandigarh's roads form a grid, and on a grid the average ratio of travel to
+straight-line distance is 4/pi ~ 1.27, so we use 1.3. Set SAAFROUTE_OSRM_URL to
+a self-hosted server, or to "off" to force the straight-line fallback. The
+method actually used is reported in `Plan.source` and in the compare() note.
 
 All fleet data is synthetic (data/fleet.json).
 """
@@ -11,15 +13,25 @@ All fleet data is synthetic (data/fleet.json).
 from __future__ import annotations
 
 import json
+import logging
 import math
+import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import httpx
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
 from .scoring import haversine_m
 
+log = logging.getLogger("saafroute")
+
 ROAD_FACTOR = 1.3
+OSRM_DEFAULT_URL = "https://router.project-osrm.org"  # public demo server: rate-limited, demo use only
+OSRM_TIMEOUT_S = 5.0
+OSRM_MAX_POINTS = 100  # public server's table-size limit
+OSRM_RETRY_AFTER_S = 60  # after a failure, skip OSRM this long so re-plans stay fast
 DROP_PENALTY_BASE = 1_000_000  # metres-equivalent: dropping a stop is far worse than any detour
 
 
@@ -60,6 +72,7 @@ class Plan:
     routes: list[Route]
     dropped: list[int]
     total_distance_m: int
+    source: str = "haversine"  # "osrm" (road network) or "haversine" (straight-line x ROAD_FACTOR)
 
 
 def load_units(kind: str, severity: int) -> int:
@@ -79,8 +92,59 @@ def load_fleet(path: Path) -> tuple[Depot, list[Truck]]:
     return Depot(d["name"], d["lat"], d["lon"]), [Truck(t["id"], t["capacity"]) for t in raw["trucks"]]
 
 
-def distance_matrix(points: list[tuple[float, float]]) -> list[list[int]]:
+_cache: dict[tuple, tuple[list[list[int]], str]] = {}
+_osrm_failed_at = 0.0
+
+
+def _osrm_url() -> str:
+    return os.environ.get("SAAFROUTE_OSRM_URL", OSRM_DEFAULT_URL).strip().rstrip("/")
+
+
+def _haversine_matrix(points: list[tuple[float, float]]) -> list[list[int]]:
     return [[int(round(haversine_m(a[0], a[1], b[0], b[1]) * ROAD_FACTOR)) for b in points] for a in points]
+
+
+def _osrm_matrix(points: list[tuple[float, float]], base: str) -> list[list[int]]:
+    """Driving distances in metres from OSRM's /table service. Raises on any problem."""
+    coords = ";".join(f"{lon:.6f},{lat:.6f}" for lat, lon in points)
+    r = httpx.get(f"{base}/table/v1/driving/{coords}", params={"annotations": "distance"}, timeout=OSRM_TIMEOUT_S)
+    r.raise_for_status()
+    body = r.json()
+    rows = body.get("distances")
+    if body.get("code") != "Ok" or not rows or len(rows) != len(points):
+        raise ValueError(f"unexpected OSRM reply: {body.get('code')}")
+    out = []
+    for row in rows:
+        if len(row) != len(points) or any(d is None for d in row):
+            raise ValueError("OSRM could not route between some points")
+        out.append([int(round(d)) for d in row])
+    return out
+
+
+def distance_matrix_with_source(points: list[tuple[float, float]]) -> tuple[list[list[int]], str]:
+    """(matrix in metres, "osrm" | "haversine"). Results are cached per set of points."""
+    global _osrm_failed_at
+    key = tuple((round(lat, 5), round(lon, 5)) for lat, lon in points)
+    if key in _cache:
+        return _cache[key]
+    base = _osrm_url()
+    in_cooldown = time.monotonic() - _osrm_failed_at < OSRM_RETRY_AFTER_S
+    if base.lower() not in ("", "off", "none") and len(points) <= OSRM_MAX_POINTS and not in_cooldown:
+        try:
+            result = (_osrm_matrix(points, base), "osrm")
+        except Exception as exc:
+            _osrm_failed_at = time.monotonic()
+            log.warning("OSRM unavailable (%s); using straight-line x %.1f distances", exc, ROAD_FACTOR)
+        else:
+            if len(_cache) > 64:
+                _cache.clear()
+            _cache[key] = result
+            return result
+    return _haversine_matrix(points), "haversine"  # not cached, so a recovered OSRM is picked up
+
+
+def distance_matrix(points: list[tuple[float, float]]) -> list[list[int]]:
+    return distance_matrix_with_source(points)[0]
 
 
 def _route_distance(matrix: list[list[int]], nodes: list[int]) -> int:
@@ -88,16 +152,19 @@ def _route_distance(matrix: list[list[int]], nodes: list[int]) -> int:
     return sum(matrix[a][b] for a, b in zip(seq, seq[1:]))
 
 
-def solve(depot: Depot, trucks: list[Truck], stops: list[Stop], time_limit_s: int = 3) -> Plan:
+def solve(depot: Depot, trucks: list[Truck], stops: list[Stop], time_limit_s: int = 3,
+          matrix: list[list[int]] | None = None, source: str | None = None) -> Plan:
     """Minimise total distance subject to truck capacity.
 
     If total load exceeds fleet capacity, the lowest-score stops are dropped
-    (penalty grows with score) and reported in `dropped`.
+    (penalty grows with score) and reported in `dropped`. `matrix` (depot first,
+    then `stops`) may be passed in so a comparison uses one distance table.
     """
     if not stops:
         return Plan([Route(t.id, [], 0, 0) for t in trucks], [], 0)
     pts = [(depot.lat, depot.lon)] + [(s.lat, s.lon) for s in stops]
-    matrix = distance_matrix(pts)
+    if matrix is None:
+        matrix, source = distance_matrix_with_source(pts)
     manager = pywrapcp.RoutingIndexManager(len(pts), len(trucks), 0)
     routing = pywrapcp.RoutingModel(manager)
 
@@ -143,10 +210,11 @@ def solve(depot: Depot, trucks: list[Truck], stops: list[Stop], time_limit_s: in
             path=[pts[0], *[pts[n] for n in nodes], pts[0]] if nodes else [],
         ))
     dropped = [stops[n - 1].id for n in range(1, len(pts)) if n not in served]
-    return Plan(routes, dropped, sum(r.distance_m for r in routes))
+    return Plan(routes, dropped, sum(r.distance_m for r in routes), source or "haversine")
 
 
-def naive_plan(depot: Depot, trucks: list[Truck], stops: list[Stop]) -> Plan:
+def naive_plan(depot: Depot, trucks: list[Truck], stops: list[Stop],
+               matrix: list[list[int]] | None = None, source: str | None = None) -> Plan:
     """Baseline: a fixed schedule that sweeps stops in sector-number order.
 
     Stops are split into depot-to-depot trips in that order; a new trip starts
@@ -155,7 +223,8 @@ def naive_plan(depot: Depot, trucks: list[Truck], stops: list[Stop]) -> Plan:
     same capacities and distance function as `solve`, so the comparison is fair.
     """
     pts = [(depot.lat, depot.lon)] + [(s.lat, s.lon) for s in stops]
-    matrix = distance_matrix(pts)
+    if matrix is None:
+        matrix, source = distance_matrix_with_source(pts)
     order = sorted(range(1, len(pts)), key=lambda n: (stops[n - 1].sector, stops[n - 1].id))
     cap = min(t.capacity for t in trucks)
     trips: list[list[int]] = [[]]
@@ -173,22 +242,33 @@ def naive_plan(depot: Depot, trucks: list[Truck], stops: list[Stop]) -> Plan:
         r.load += sum(stops[n - 1].load for n in trip)
         r.distance_m += _route_distance(matrix, trip)
         r.path += [pts[0], *[pts[n] for n in trip], pts[0]]
-    return Plan(routes, [], sum(r.distance_m for r in routes))
+    return Plan(routes, [], sum(r.distance_m for r in routes), source or "haversine")
 
 
 def compare(depot: Depot, trucks: list[Truck], stops: list[Stop]) -> dict:
-    """Optimised plan vs naive plan over the *same* set of served stops."""
-    opt = solve(depot, trucks, stops)
-    served = [s for s in stops if s.id not in set(opt.dropped)]
-    base = naive_plan(depot, trucks, served)
+    """Optimised plan vs naive plan over the *same* set of served stops.
+
+    Both plans use one distance table, so the comparison is always like for like.
+    """
+    pts = [(depot.lat, depot.lon)] + [(s.lat, s.lon) for s in stops]
+    full, source = distance_matrix_with_source(pts)
+    opt = solve(depot, trucks, stops, matrix=full, source=source)
+    dropped = set(opt.dropped)
+    keep = [0] + [i for i, s in enumerate(stops, start=1) if s.id not in dropped]
+    served = [stops[i - 1] for i in keep[1:]]
+    sub = [[full[a][b] for b in keep] for a in keep]
+    base = naive_plan(depot, trucks, served, matrix=sub, source=source)
     saved = base.total_distance_m - opt.total_distance_m
     pct = round(100 * saved / base.total_distance_m, 1) if base.total_distance_m else 0.0
+    how = ("road distances from OpenStreetMap (OSRM)" if source == "osrm"
+           else f"straight-line x {ROAD_FACTOR}, not road distances")
     return {
         "optimised": opt,
         "baseline": base,
         "saved_m": saved,
         "saved_pct": pct,
-        "note": "SIMULATION on synthetic fleet data; distances are straight-line x 1.3, not measured road km.",
+        "source": source,
+        "note": f"SIMULATION on synthetic fleet data; distances are {how}.",
     }
 
 

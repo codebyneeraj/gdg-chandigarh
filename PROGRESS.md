@@ -17,7 +17,7 @@ Deadline: **16 Oct 2026, 23:59 IST**. Last updated: 15 Oct 2026.
 - **No local models** (user instruction): the C: drive filled up while pulling an Ollama model. All models are hosted via the Gemini API with the user's existing key.
 - **Vision:** Gemma 4 (open weights, Apache-2.0) via the Gemini API. The user asked about 31B; the benchmark shows 31B returning server errors on most requests, so **26B-A4B is primary and 31B is the fallback** (31B answered 2 of 29; 26B answered 34 of 38). Benchmark stopped early for the deadline.
 - **Drafting:** gemini-3.5-flash allows only 20 free requests/day (exhausted during the benchmark), so the chain is 3.5-flash-lite → 3.1-flash-lite → 2.5-flash, then templates.
-- **Distances:** haversine × 1.3 instead of an OSM road network (plan's allowed fallback; keeps setup to one command).
+- **Distances:** OSRM (OpenStreetMap) road distances via `routing.distance_matrix_with_source`, with haversine × 1.3 as automatic fallback.
 - **One-command run:** `python run_demo.py` (Docker isn't installed on this machine, so there is no tested Docker setup; `make` isn't available either).
 - **Benchmark images:** Wikimedia Commons, open licences only; images with people or readable plates excluded (rule: no real people's photos).
 

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clean City Chandigarh · SaafRoute</title>
+<link rel="stylesheet" href="/vendor/leaflet.css">
+<style>
+  :root { --ink: #10291f; --muted: #5b6b62; --line: #d9e2dc; --bg: #f4f7f5; --card: #fff; --brand: #1f7a4d;
+          --wait: #5b4fd1; --sched: #b86b00; --done: #2a7a4b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { background: var(--brand); color: #fff; padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
+  header h1 { margin: 0; font-size: 1.15rem; }
+  header p { margin: 2px 0 0; opacity: .9; font-size: .88rem; }
+  nav { display: flex; gap: 8px; margin-top: 10px; }
+  nav a { color: #fff; text-decoration: none; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.6); font-size: .88rem; }
+  nav a.on { background: #fff; color: var(--brand); font-weight: 700; }
+  main { max-width: 640px; margin: 0 auto; padding: 14px 16px 40px; }
+  .banner { background: #fff7e0; border: 1px solid #f0dca0; border-radius: 10px; padding: 8px 12px; font-size: .85rem; margin-bottom: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .tile b { display: block; font-size: 1.7rem; line-height: 1.1; }
+  .tile span { color: var(--muted); font-size: .85rem; }
+  .tile.wait b { color: var(--wait); } .tile.sched b { color: var(--sched); } .tile.done b { color: var(--done); }
+  .busy { color: var(--muted); font-size: .88rem; margin: 10px 2px 0; }
+  #map { height: 260px; border-radius: 14px; border: 1px solid var(--line); margin-top: 14px; z-index: 0; }
+  .controls { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; width: 100%; padding-bottom: 2px; }
+  .chips button { flex: none; font: inherit; font-size: .88rem; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  .chips button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; width: 100%; }
+  .item { background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--wait); border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+  .item.approved { border-left-color: var(--sched); } .item.collected { border-left-color: var(--done); }
+  .item h3 { margin: 0 0 2px; font-size: 1rem; }
+  .meta { color: var(--muted); font-size: .86rem; }
+  .row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: #eef0fb; color: #3b3a8a; }
+  .pill.approved { background: #fff3dc; color: #8a5a00; } .pill.collected { background: #e6f4ec; color: #1b6a40; }
+  .who { margin-top: 6px; font-size: .9rem; }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+  .dot { border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .foot { color: var(--muted); font-size: .8rem; margin-top: 18px; }
+  .item { cursor: pointer; }
+  .item .more { color: var(--brand); font-size: .84rem; font-weight: 600; margin-top: 6px; }
+  #sheet { position: fixed; inset: 0; z-index: 1000; display: none; }
+  #sheet.open { display: block; }
+  #sheet .back { position: absolute; inset: 0; background: rgba(16, 41, 31, .55); }
+  #sheet .panel { position: absolute; left: 0; right: 0; bottom: 0; max-height: 92vh; overflow-y: auto; background: var(--card);
+    border-radius: 18px 18px 0 0; max-width: 640px; margin: 0 auto; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+  #sheet img { display: block; width: 100%; max-height: 300px; object-fit: cover; background: #e8eeea; }
+  #sheet .nophoto { background: #e8eeea; color: var(--muted); text-align: center; padding: 28px 12px; font-size: .9rem; }
+  #sheet .inner { padding: 14px 16px 0; }
+  #sheet h2 { margin: 8px 0 2px; font-size: 1.15rem; }
+  #sheet p { margin: 8px 0; white-space: pre-wrap; }
+  .steps { list-style: none; padding: 0; margin: 12px 0; border-left: 3px solid var(--line); }
+  .steps li { padding: 2px 0 8px 14px; position: relative; font-size: .92rem; }
+  .steps li::before { content: ""; position: absolute; left: -9px; top: 6px; width: 13px; height: 13px; border-radius: 50%; background: #fff; border: 3px solid var(--line); }
+  .steps li.done::before { background: var(--brand); border-color: var(--brand); }
+  .steps li.todo { color: var(--muted); }
+  .sbtns { display: flex; gap: 8px; margin-top: 12px; }
+  .sbtns button { flex: 1; font: inherit; font-weight: 600; padding: 11px; border-radius: 10px; border: 1px solid var(--brand); background: #fff; color: var(--brand); }
+  .sbtns button.primary { background: var(--brand); color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Clean City Chandigarh</h1>
+  <p>What is being reported and cleaned, live</p>
+  <nav><a href="/">Report waste</a><a href="/city" class="on">City dashboard</a></nav>
+</header>
+<main>
+  <div class="banner" id="demo" hidden>Some tickets shown here are synthetic demo data.</div>
+  <section class="tiles" aria-label="Summary">
+    <div class="tile wait"><b id="sWait">–</b><span>Awaiting review</span></div>
+    <div class="tile sched"><b id="sSched">–</b><span>Scheduled for pickup</span></div>
+    <div class="tile done"><b id="sDone">–</b><span>Collected</span></div>
+    <div class="tile"><b id="sNew">–</b><span>New in last 24 h</span></div>
+  </section>
+  <p class="busy" id="busy"></p>
+
+  <div id="map" aria-label="Map of reported waste"></div>
+
+  <div class="controls">
+    <div class="chips" id="chips" role="tablist">
+      <button data-f="all" class="on">All</button>
+      <button data-f="pending_review">Awaiting review</button>
+      <button data-f="approved">Scheduled</button>
+      <button data-f="collected">Collected</button>
+    </div>
+    <select id="sector" aria-label="Filter by sector"><option value="">All sectors</option></select>
+  </div>
+
+  <div id="list"></div>
+  <p class="foot" id="foot">Photos have their metadata removed, and photos where a face or number plate was detected are shown blurred. Reporter details are never shown, and pins from phone GPS are placed at the sector centre.</p>
+</main>
+<div id="sheet" role="dialog" aria-modal="true" aria-label="Ticket details">
+  <div class="back" id="sheetBack"></div>
+  <div class="panel" id="sheetPanel"></div>
+</div>
+<script src="/vendor/leaflet.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const KIND = { overflowing_bin: "Overflowing bin", illegal_dump: "Illegal dumping", litter: "Litter" };
+const COLOR = { pending_review: "#5b4fd1", approved: "#b86b00", collected: "#2a7a4b" };
+let tickets = [], filter = "all", sector = "", map, layer, markers = new Map(), first = true;
+
+function ago(iso) {
+  const t = Date.parse(iso); if (!t) return "";
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 2) return "just now"; if (m < 60) return m + " min ago";
+  const h = Math.round(m / 60); if (h < 24) return h + " h ago";
+  const d = Math.round(h / 24); return d + (d === 1 ? " day ago" : " days ago");
+}
+
+function initMap() {
+  try {
+    map = L.map("map", { zoomSnap: 0.25 }).setView([30.728, 76.775], 12.5);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap contributors" }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  } catch { map = null; $("#map").style.display = "none"; }
+}
+
+function visible() {
+  return tickets.filter((t) => (filter === "all" || t.status === filter) && (!sector || String(t.sector) === sector));
+}
+
+function render() {
+  const list = visible();
+  $("#list").innerHTML = list.length ? list.map((t) => {
+    const who = t.status === "pending_review"
+      ? "Not assigned yet: an officer will review this soon."
+      : `Reviewed by <b>${esc(t.officer || "an officer")}</b>` + (t.truck ? ` · assigned to truck <b>${esc(t.truck)}</b>` : (t.status === "approved" ? " · waiting for a truck slot" : "")) +
+        (t.status === "collected" ? ` · collected ${esc(ago(t.collected_at))}` : "");
+    return `<article class="item ${esc(t.status)}" data-id="${t.id}">
+      <div class="row"><h3>${esc(KIND[t.kind] || "Waste report")} · Sector ${esc(t.sector)}</h3><span class="pill ${esc(t.status)}">${esc(t.status_text)}</span></div>
+      <div class="meta">#${t.id} · reported ${esc(ago(t.created_at))}${t.severity ? " · severity " + esc(t.severity) + " of 5" : ""}${t.demo ? " · demo" : ""}${t.report_count > 1 ? ` · <b>${esc(t.report_count)} reports</b>` : ""}</div>
+      <div class="who">${who}</div><div class="more">View details and photo ›</div></article>`;
+  }).join("") : `<p class="empty">No tickets match these filters.</p>`;
+  if (!map) return;
+  layer.clearLayers(); markers.clear();
+  for (const t of list) {
+    const m = L.circleMarker([t.lat, t.lon], { radius: 9, color: "#fff", weight: 2, fillColor: COLOR[t.status] || "#555", fillOpacity: .92 })
+      .bindTooltip(`#${t.id} · ${KIND[t.kind] || "Report"} · ${t.status_text}`).addTo(layer);
+    m.on("click", () => { const el = document.querySelector(`.item[data-id="${t.id}"]`); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); });
+    markers.set(t.id, m);
+  }
+}
+
+async function load() {
+  try {
+    const r = await fetch("/public/tickets");
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "Could not load");
+    tickets = d.tickets;
+    $("#sWait").textContent = d.stats.awaiting; $("#sSched").textContent = d.stats.scheduled;
+    $("#sDone").textContent = d.stats.collected; $("#sNew").textContent = d.stats.new_24h;
+    $("#busy").textContent = d.stats.busiest.length ? "Busiest sectors right now: " + d.stats.busiest.map((b) => `Sector ${b.sector} (${b.open} open)`).join(", ") : "";
+    $("#demo").hidden = !d.has_demo;
+    if (first) {
+      const secs = [...new Set(tickets.map((t) => t.sector))].sort((a, b) => a - b);
+      $("#sector").innerHTML = '<option value="">All sectors</option>' + secs.map((s) => `<option value="${s}">Sector ${s}</option>`).join("");
+      first = false;
+    }
+    render();
+  } catch (e) {
+    $("#list").innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+  }
+}
+
+$("#chips").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  filter = b.dataset.f;
+  document.querySelectorAll("#chips button").forEach((x) => x.classList.toggle("on", x === b));
+  render();
+});
+$("#sector").addEventListener("change", (ev) => { sector = ev.target.value; render(); });
+function showOnMap(id) {
+  const m = markers.get(id);
+  if (!map || !m) return;
+  closeSheet();
+  $("#map").scrollIntoView({ behavior: "smooth", block: "center" });
+  map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 14), { duration: 0.9 });
+  m.openTooltip();
+}
+
+function closeSheet() { $("#sheet").classList.remove("open"); document.body.style.overflow = ""; }
+
+function step(done, text) { return `<li class="${done ? "done" : "todo"}">${text}</li>`; }
+
+async function openSheet(id) {
+  const sheet = $("#sheet"), panel = $("#sheetPanel");
+  panel.innerHTML = `<div class="inner"><p class="empty">Loading…</p></div>`;
+  sheet.classList.add("open"); document.body.style.overflow = "hidden";
+  try {
+    const r = await fetch("/public/ticket/" + id);
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.detail || "Could not load this ticket.");
+    const photo = t.has_photo
+      ? `<img src="/public/ticket/${t.id}/image" alt="Photo of the reported waste" onerror="this.outerHTML='<div class=nophoto>Photo unavailable</div>'">`
+      : `<div class="nophoto">No photo for this ticket${t.demo ? " (demo data)" : ""}</div>`;
+    const approved = t.status === "approved" || t.status === "collected";
+    const steps = [
+      step(true, `Reported ${esc(ago(t.created_at))}`),
+      step(approved, approved ? `Reviewed and approved by <b>${esc(t.officer || "an officer")}</b> ${esc(ago(t.reviewed_at))}` : "Waiting for an officer to review"),
+      step(approved && !!(t.truck || t.status === "collected"), t.truck ? `Assigned to truck <b>${esc(t.truck)}</b>` : (approved ? "Waiting for a truck slot" : "Truck assignment")),
+      step(t.status === "collected", t.status === "collected" ? `Collected ${esc(ago(t.collected_at))}` : "Collection"),
+    ].join("");
+    const facts = [KIND[t.kind], t.waste_type && t.waste_type !== "none" ? t.waste_type.replace(/_/g, " ") : "", t.severity ? `severity ${t.severity} of 5` : ""].filter(Boolean).map(esc).join(" · ");
+    panel.innerHTML = `${photo}<div class="inner">
+      <span class="pill ${esc(t.status)}">${esc(t.status_text)}</span>
+      <h2>${esc(t.title || (KIND[t.kind] || "Waste report") + " in Sector " + t.sector)}</h2>
+      <div class="meta">#${t.id} · Sector ${esc(t.sector)}${facts ? " · " + facts : ""}${t.demo ? " · demo" : ""}</div>
+      ${t.report_count > 1 ? `<p class="meta"><b>${esc(t.report_count)} people</b> have reported this spot.</p>` : ""}
+      <ul class="steps">${steps}</ul>
+      ${t.body ? `<p>${esc(t.body)}</p>` : ""}
+      ${t.reason ? `<p class="meta">What the AI saw: ${esc(t.reason)}</p>` : ""}
+      ${t.photo_blurred ? `<p class="meta">A face or number plate was detected, so the public copy of this photo is blurred.</p>` : ""}
+      <div class="sbtns"><button type="button" data-map="${t.id}">Show on map</button><button type="button" class="primary" id="sheetClose">Close</button></div>
+    </div>`;
+  } catch (e) {
+    panel.innerHTML = `<div class="inner"><p class="empty">${esc(e.message)}</p><div class="sbtns"><button type="button" class="primary" id="sheetClose">Close</button></div></div>`;
+  }
+}
+
+$("#list").addEventListener("click", (ev) => { const it = ev.target.closest(".item"); if (it) openSheet(Number(it.dataset.id)); });
+$("#sheet").addEventListener("click", (ev) => {
+  if (ev.target.id === "sheetBack" || ev.target.id === "sheetClose") closeSheet();
+  const b = ev.target.closest("[data-map]"); if (b) showOnMap(Number(b.dataset.map));
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeSheet(); });
+
+initMap();
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

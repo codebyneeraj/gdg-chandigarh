@@ -19,8 +19,13 @@ class ReplayVision:
     def __init__(self) -> None:
         self.recorded: dict[str, dict] = {}
         if RECORDED.exists():
-            self.recorded = json.loads(RECORDED.read_text(encoding="utf-8"))
-        self.name = "replay:" + (next(iter(self.recorded.values()))["model"] if self.recorded else "none")
+            try:
+                data = json.loads(RECORDED.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    self.recorded = {k: v for k, v in data.items() if isinstance(v, dict) and "raw" in v}
+            except (OSError, ValueError):
+                self.recorded = {}   # corrupt file: behave as if there were no recordings
+        self.name = "replay:" + (next(iter(self.recorded.values())).get("model", "unknown") if self.recorded else "none")
 
     def generate(self, image_jpeg: bytes, prompt: str) -> str:
         hit = self.recorded.get(hashlib.sha256(image_jpeg).hexdigest())

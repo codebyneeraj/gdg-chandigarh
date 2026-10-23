@@ -13,6 +13,7 @@ let filter = "pending_review";
 let expandedId = null;
 let map, reportLayer, routeLayer, baseLayer, lastPlan = null;
 const markers = new Map();
+let sectorList = [], gpsFix = null;
 
 async function api(path, opts = {}) {
   const res = await fetch(path, opts);
@@ -81,6 +82,7 @@ async function initMap() {
   });
 
   const { sectors, depot } = await api("/api/sectors");
+  sectorList = sectors;
   const sel = $("#sector");
   sel.innerHTML = `<option value="" disabled selected>Choose sector…</option>` +
     sectors.map((s) => `<option value="${s.sector}">Sector ${s.sector}</option>`).join("");
@@ -111,7 +113,7 @@ function drawReports() {
   reportLayer.clearLayers();
   markers.clear();
   for (const r of reports) {
-    if (r.status === "rejected" || r.status === "collected" || r.kind === "clean" || !r.kind) continue;
+    if (r.status === "rejected" || r.status === "collected" || r.status === "merged" || r.kind === "clean" || !r.kind) continue;
     const m = L.marker([r.lat, r.lon], { icon: pinIcon(r, r.id === expandedId), keyboard: false })
       .bindTooltip(`#${r.id} · ${KIND[r.kind] || "?"} · score ${r.score ?? "–"}${r.synthetic ? " · synthetic" : ""}`)
       .on("click", () => focusTicket(r.id));
@@ -124,10 +126,11 @@ function drawReports() {
 function breakdownHtml(b) {
   if (!b) return "";
   const parts = [["sev", b.severity], ["age", b.age], ["rep", b.repeats], ["site", b.site]];
-  return `<div class="breakdown">
+  return `<details class="breakdown">
+    <summary>Why this score? <b>${b.total}</b> of 100</summary>
     <div class="bar" aria-hidden="true">${parts.map(([k, v]) => `<i class="b-${k}" style="width:${v}%"></i>`).join("")}</div>
-    Severity ${b.severity} + age ${b.age} + repeats ${b.repeats} (${b.repeat_count} nearby) + site ${b.site} (${esc(b.site_reason)}) = <b>${b.total}</b> of 100
-  </div>`;
+    Severity ${b.severity} + age ${b.age} + repeats ${b.repeats} (${b.repeat_count} nearby) + site ${b.site} (${esc(b.site_reason)}) = <b>${b.total}</b>
+  </details>`;
 }
 
 function statusPill(r) {
@@ -138,13 +141,13 @@ function compactHtml(r) {
   const needs = r.vision_status !== "ok";
   const title = r.kind ? `${esc(KIND[r.kind])} · Sector ${r.sector}` : `Sector ${r.sector} · needs a human look`;
   const sub = r.kind
-    ? `${esc(WASTE[r.waste_type] || r.waste_type)} · severity ${r.severity}${r.synthetic ? " · synthetic" : ""}`
+    ? `${esc(WASTE[r.waste_type] || r.waste_type)} · severity ${r.severity}${r.report_count > 1 ? ` · ${r.report_count} reports` : ""}${r.synthetic ? " · synthetic" : ""}`
     : "The model's answer could not be validated";
   const box = needs
     ? `<div class="score" style="background:#e4def9;color:#3a2fa3">?</div>`
     : `<div class="score" style="background:${scoreHex(r)}">${r.score != null ? Math.round(r.score) : "–"}</div>`;
   return `<button type="button" class="ticket compact${needs ? " review-needed" : ""}" id="t-${r.id}" data-id="${r.id}" data-expand aria-label="Open ticket ${r.id}">
-    ${box}<div class="c-main"><div class="ttitle">${title}</div><div class="meta">${sub}</div></div>${statusPill(r)}
+    ${box}${r.has_image ? `<img class="cthumb" loading="lazy" src="/api/reports/${r.id}/image" alt="">` : ""}<div class="c-main"><div class="ttitle">${title}</div><div class="meta">${sub}</div></div>${statusPill(r)}
   </button>`;
 }
 
@@ -154,11 +157,15 @@ function ticketHtml(r) {
   const pills = [
     r.synthetic ? `<span class="pill synth">synthetic</span>` : "",
     review ? `<span class="pill review">needs human review</span>` : "",
-    r.image_blurred ? `<span class="pill blur">photo blurred (privacy)</span>` : "",
-    statusPill(r),
+    r.image_blurred ? `<span class="pill blur">face/plate flagged</span>` : "",
+    r.report_count > 1 ? `<span class="pill count" title="Display only: this does not change the score">${r.report_count} reports of this spot</span>` : "",
+    pending ? "" : statusPill(r),
   ].join("");
+  const lang = r.ticket_lang || "en";
   const scoreBox = `<div class="score" style="background:${scoreHex(r)}">${r.score != null ? Math.round(r.score) : "–"}<small>score</small></div>`;
-  const thumb = r.has_image ? `<img class="thumb" loading="lazy" src="/api/reports/${r.id}/image" alt="Reported photo #${r.id}">` : "";
+  const photo = r.has_image
+    ? `<img class="photo" data-zoom="${r.id}" loading="lazy" src="/api/reports/${r.id}/image" alt="Reported photo #${r.id} (tap to enlarge)" title="Tap to enlarge">`
+    : `<div class="nophoto">${r.synthetic ? "Synthetic demo ticket: no photo" : "No photo for this ticket"}</div>`;
   const facts = r.kind
     ? `${esc(WASTE[r.waste_type] || r.waste_type)} · severity ${r.severity} of 5 · confidence ${Math.round((r.confidence || 0) * 100)}%`
     : `Model could not analyse this photo${r.vision_error ? `: ${esc(r.vision_error.slice(0, 120))}` : ""}`;
@@ -167,28 +174,47 @@ function ticketHtml(r) {
         <input class="t-title" value="${esc(r.ticket_title)}" maxlength="120" aria-label="Ticket title">
         <textarea class="t-body" maxlength="1200" aria-label="Ticket text">${esc(r.ticket_body)}</textarea></div>`
     : r.ticket_title ? `<div class="draft"><div class="ttitle">${esc(r.ticket_title)}</div><div class="body">${esc(r.ticket_body)}</div></div>` : "";
+  const manual = pending && (!r.kind || r.kind === "clean")
+    ? `<div class="actions manual"><span class="meta">Set the analysis manually:</span>
+        <select class="m-kind" aria-label="Kind">${Object.entries(KIND).filter(([k]) => k !== "clean").map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
+        <select class="m-waste" aria-label="Material">${Object.entries(WASTE).filter(([k]) => k !== "none").map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
+        <select class="m-sev" aria-label="Severity">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${n === 3 ? " selected" : ""}>Severity ${n}</option>`).join("")}</select>
+        <button type="button" class="primary" data-act="analysis">Set analysis</button></div>` : "";
+  const sectorFix = sectorList.length
+    ? `<select data-act="sector" aria-label="Correct the sector" title="Wrong sector? Pick the right one">
+        ${sectorList.map((s) => `<option value="${s.sector}"${s.sector === r.sector ? " selected" : ""}>Sector ${s.sector}</option>`).join("")}</select>` : "";
+  const mismatch = r.sector_mismatch && r.nearest_sector
+    ? `<div class="mismatch" role="alert">⚠ Sector ${r.sector} was chosen, but GPS places it near sector ${r.nearest_sector}.
+        <button type="button" data-act="usesector" data-sector="${r.nearest_sector}">Use sector ${r.nearest_sector}</button></div>` : "";
   const actions = pending ? `<div class="actions">
       ${r.ticket_title ? `<button type="button" class="primary" data-act="approve">Approve</button>` : ""}
       <button type="button" data-act="reject">Reject</button>
-      ${r.kind && r.kind !== "clean" ? `<select data-act="lang" aria-label="Redraft in language">
-        <option value="">Redraft in…</option><option value="en">English</option><option value="hi">हिन्दी</option><option value="pa">ਪੰਜਾਬੀ</option></select>` : ""}
-    </div>` : r.status === "approved" ? `<div class="actions"><button type="button" data-act="collected">Mark collected</button></div>` : "";
+      ${sectorFix}
+      ${r.kind && r.kind !== "clean" ? `<select data-act="lang" aria-label="Ticket language (redrafts the ticket)" title="Ticket language: changing it redrafts the ticket">
+        <option value="en"${lang === "en" ? " selected" : ""}>English</option><option value="hi"${lang === "hi" ? " selected" : ""}>हिन्दी</option><option value="pa"${lang === "pa" ? " selected" : ""}>ਪੰਜਾਬੀ</option></select>` : ""}
+    </div>` : r.status === "approved" ? `<div class="actions"><button type="button" data-act="collected">Mark collected</button>${sectorFix}</div>` : "";
   return `<article class="ticket open" id="t-${r.id}" data-id="${r.id}">
     <div class="thead">${scoreBox}<div class="c-main">
       <div class="ttitle">${r.kind ? esc(KIND[r.kind]) : "Needs a human look"} · Sector ${r.sector}</div>
-      <div class="meta">${pills}</div>
       <div class="meta">${facts}</div>
-      ${r.reason ? `<div class="meta reason">“${esc(r.reason)}”</div>` : ""}
-      <div class="meta">#${r.id} · Vision: ${esc((r.vision_model || "–").replace("gemini-api:", ""))}${r.ticket_model ? ` · Draft: ${esc(r.ticket_model.replace("gemini-api:", ""))}` : ""}${r.reviewed_by ? ` · Reviewed by ${esc(r.reviewed_by)}` : ""}</div>
-    </div>${thumb}</div>
+      ${pills ? `<div class="meta">${pills}</div>` : ""}
+    </div></div>
+    ${photo}
+    ${mismatch}
+    ${r.report_count > 1 ? `<div class="meta">Also reported by ${r.report_count - 1} other${r.report_count > 2 ? "s" : ""} at this spot.</div>` : ""}
+    ${r.reason ? `<div class="reason">“${esc(r.reason)}”</div>` : ""}
     ${breakdownHtml(r.score_breakdown)}
     ${draft}
+    ${manual}
     ${actions}
+    <details class="tech"><summary>Details</summary>
+      <div class="meta">#${r.id} · Vision: ${esc((r.vision_model || "–").replace("gemini-api:", ""))}${r.ticket_model ? ` · Draft: ${esc(r.ticket_model.replace("gemini-api:", ""))}` : ""}${r.reviewed_by ? ` · Reviewed by ${esc(r.reviewed_by)}` : ""}</div>
+    </details>
   </article>`;
 }
 
 function visibleList() {
-  return reports.filter((r) => filter === "all" || r.status === filter);
+  return reports.filter((r) => r.status !== "merged" && (filter === "all" || r.status === filter)); // merged reports only raise a counter
 }
 
 function drawTickets() {
@@ -212,12 +238,23 @@ async function refresh() {
   }
 }
 
+function flyToTicket(id) {
+  const m = map && markers.get(id);
+  if (!m) return;
+  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const target = m.getLatLng(), zoom = Math.max(map.getZoom(), 15);
+  if (reduce) map.setView(target, zoom, { animate: false });
+  else map.flyTo(target, zoom, { duration: 1.1 });
+  map.once("moveend", () => { if (expandedId === id && markers.get(id) === m) m.openTooltip(); });
+}
+
 function focusTicket(id, scroll = true) {
   const r = reports.find((x) => x.id === id);
   if (!r) return;
   if (filter !== "all" && r.status !== filter) { filter = "all"; document.querySelectorAll(".filters button").forEach((b) => b.classList.toggle("on", b.dataset.f === "all")); }
   expandedId = id;
   drawTickets();
+  flyToTicket(id);
   const el = $(`#t-${id}`);
   if (!el) return;
   el.classList.add("focus");
@@ -237,7 +274,22 @@ function official() {
   return v;
 }
 
+function closeZoom() { const z = $("#zoom"); if (z) z.remove(); }
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeZoom(); });
+
 $("#tickets").addEventListener("click", async (ev) => {
+  const zoom = ev.target.closest("[data-zoom]");
+  if (zoom) {
+    closeZoom();
+    const z = document.createElement("div");
+    z.id = "zoom";
+    z.setAttribute("role", "dialog");
+    z.setAttribute("aria-label", "Photo, tap to close");
+    z.innerHTML = `<img src="/api/reports/${Number(zoom.dataset.zoom)}/image" alt="Reported photo, enlarged">`;
+    z.addEventListener("click", closeZoom);
+    document.body.appendChild(z);
+    return;
+  }
   const open = ev.target.closest("[data-expand]");
   if (open) { focusTicket(Number(open.dataset.id), false); return; }
   const btn = ev.target.closest("button[data-act]");
@@ -248,6 +300,17 @@ $("#tickets").addEventListener("click", async (ev) => {
     if (act === "approve") {
       await api(`/api/reports/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ official: official(), title: $(".t-title", card)?.value, body: $(".t-body", card)?.value }) });
+    } else if (act === "analysis") {
+      await api(`/api/reports/${id}/analysis`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ official: official(), kind: $(".m-kind", card).value, waste_type: $(".m-waste", card).value,
+          severity: Number($(".m-sev", card).value) }) });
+      expandedId = Number(id);
+      await refresh();
+      await plan();
+      return;
+    } else if (act === "usesector") {
+      await changeSector(id, Number(btn.dataset.sector));
+      return;
     } else if (act === "reject") {
       await api(`/api/reports/${id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ official: official() }) });
@@ -263,7 +326,22 @@ $("#tickets").addEventListener("click", async (ev) => {
   }
 });
 
+async function changeSector(id, sector) {
+  await api(`/api/reports/${id}/sector`, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ official: official(), sector }) });
+  expandedId = Number(id);
+  await refresh();
+  await plan();
+}
+
 $("#tickets").addEventListener("change", async (ev) => {
+  const secSel = ev.target.closest("select[data-act=sector]");
+  if (secSel) {
+    secSel.disabled = true;
+    try { await changeSector(secSel.closest(".ticket").dataset.id, Number(secSel.value)); }
+    catch (e) { alert(e.message); await refresh(); }
+    return;
+  }
   const sel = ev.target.closest("select[data-act=lang]");
   if (!sel || !sel.value) return;
   const card = sel.closest(".ticket");
@@ -275,7 +353,6 @@ $("#tickets").addEventListener("change", async (ev) => {
     $(".t-body", card).value = d.body;
   } catch (e) { alert(e.message); }
   sel.disabled = false;
-  sel.value = "";
 });
 
 document.querySelectorAll(".filters button").forEach((b) => b.addEventListener("click", () => setFilter(b.dataset.f)));
@@ -302,6 +379,35 @@ function getGps() {
   });
 }
 
+function nearestSector(lat, lon) {
+  const rad = Math.PI / 180;
+  const dist = (s) => {
+    const dp = (s.lat - lat) * rad, dl = (s.lon - lon) * rad;
+    const a = Math.sin(dp / 2) ** 2 + Math.cos(lat * rad) * Math.cos(s.lat * rad) * Math.sin(dl / 2) ** 2;
+    return 2 * 6371000 * Math.asin(Math.sqrt(a));
+  };
+  let best = null, bestD = Infinity;
+  for (const s of sectorList) { const d = dist(s); if (d < bestD) { best = s; bestD = d; } }
+  return best && bestD <= 3000 ? best : null; // farther than 3 km from every centre: not in a sector
+}
+
+$("#useGps").addEventListener("change", async () => {
+  const note = $("#gpsMsg");
+  gpsFix = null;
+  note.textContent = "";
+  if (!$("#useGps").checked) return;
+  note.textContent = "Finding your location…";
+  const c = await getGps();
+  if (!$("#useGps").checked) return;
+  if (!c) { note.textContent = "Could not get your location. Choose the sector yourself."; return; }
+  gpsFix = c;
+  const s = nearestSector(c.latitude, c.longitude);
+  if (!s) { note.textContent = "Your location is outside Chandigarh's sectors. Choose the sector yourself."; return; }
+  $("#sector").value = String(s.sector);
+  note.textContent = `Sector set to ${s.sector} from your location (you can change it).`;
+});
+$("#sector").addEventListener("change", () => { $("#gpsMsg").textContent = ""; });
+
 $("#reportForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const msg = $("#formMsg"), btn = $("#submitBtn"), f = $("#photo").files[0];
@@ -315,7 +421,7 @@ $("#reportForm").addEventListener("submit", async (ev) => {
   fd.append("sector", $("#sector").value);
   fd.append("lang", $("#lang").value);
   if ($("#useGps").checked) {
-    const c = await getGps();
+    const c = gpsFix || await getGps();
     if (c) { fd.append("lat", c.latitude); fd.append("lon", c.longitude); }
   }
   btn.disabled = true;
@@ -324,6 +430,12 @@ $("#reportForm").addEventListener("submit", async (ev) => {
   try {
     const r = await api("/api/reports", { method: "POST", body: fd });
     clearInterval(tick);
+    if (r.created === false) {
+      msg.textContent = r.message;
+      $("#result").hidden = false;
+      $("#result").innerHTML = `<h3>No ticket created</h3><p class="hint">${esc(r.message)}</p><p class="hint">Why: ${esc(r.reason)}</p>`;
+      return;
+    }
     msg.textContent = `Done in ${Math.round((Date.now() - t0) / 1000)} s. Draft ticket #${r.id} is waiting for an official's approval.`;
     showResult(r);
     await refresh();
@@ -354,10 +466,40 @@ function showResult(r) {
         <dt>Confidence</dt><dd>${Math.round(r.confidence * 100)}%</dd>
         <dt>Why</dt><dd>${esc(r.reason)}</dd>
         ${r.score != null ? `<dt>Score</dt><dd>${r.score} of 100</dd>` : ""}
-        ${r.image_blurred ? `<dt>Privacy</dt><dd>Face or number plate detected: only a blurred copy was kept.</dd>` : ""}
+        ${r.image_blurred ? `<dt>Privacy</dt><dd>Face or number plate detected: the public city view shows a blurred copy.</dd>` : ""}
       </dl>${done}`;
   }
   $("#viewTicket").addEventListener("click", () => { dlg.close(); focusTicket(r.id); });
+
+  // A similar open ticket nearby: ask, never merge on our own.
+  const similar = Array.isArray(r.similar) ? r.similar : [];
+  if (!similar.length) return;
+  const ask = document.createElement("div");
+  ask.className = "similar";
+  ask.innerHTML = `<h3>Is this the same spot?</h3>
+    ${similar.map((s) => `<div class="s-row"><span>A similar report is already open nearby: <b>#${s.id}</b> ${esc(KIND[s.kind] || "")}, Sector ${esc(s.sector)} (${s.report_count} report${s.report_count > 1 ? "s" : ""})${s.distance_m != null ? `, ${s.distance_m} m away` : ""}.</span>
+      <button type="button" class="primary" data-merge="${s.id}">Yes, add to it</button></div>`).join("")}
+    <button type="button" data-nomerge>No, new spot</button>`;
+  box.appendChild(ask);
+  ask.addEventListener("click", async (ev) => {
+    if (ev.target.closest("[data-nomerge]")) { ask.remove(); return; }
+    const b = ev.target.closest("[data-merge]");
+    if (!b) return;
+    const into = Number(b.dataset.merge);
+    b.disabled = true;
+    try {
+      await api(`/api/reports/${r.id}/merge`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ into }) });
+      box.innerHTML = `<h3>Thanks, your report was added to #${into}</h3><p class="hint">It raises that ticket's report count. The ticket's priority score is not changed.</p>
+        <div class="actions"><button type="button" class="primary" id="viewTicket">View ticket</button></div>`;
+      $("#viewTicket").addEventListener("click", () => { dlg.close(); focusTicket(into); });
+      $("#formMsg").textContent = `Your report was added to ticket #${into}.`;
+      await refresh();
+      await plan();
+    } catch (e) {
+      b.disabled = false;
+      alert(e.message);
+    }
+  });
 }
 
 /* ---------- routes ---------- */

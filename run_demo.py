@@ -64,6 +64,7 @@ def main() -> None:
     if args.offline:
         env["SAAFROUTE_VISION_PROVIDER"] = "replay"
         env["SAAFROUTE_DRAFT_PROVIDER"] = "template"
+        env["SAAFROUTE_OSRM_URL"] = "off"
     elif not (env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY")):
         print("\nGEMINI_API_KEY is not set (environment or .env). Starting in --offline mode instead.\n")
         env["SAAFROUTE_VISION_PROVIDER"] = "replay"

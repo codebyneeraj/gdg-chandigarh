@@ -40,7 +40,7 @@ flowchart LR
   H --> G
   G -- approved only --> R[OR-Tools CVRP<br/>vs naive baseline]
   R --> M[Map dashboard<br/>Leaflet + OSM]
-  C -. privacy_flag .-> P[Store blurred copy only]
+  C -. privacy_flag .-> P[Public view shows a blurred copy]
 ```
 
 | Component | Choice | Why |
@@ -58,6 +58,8 @@ flowchart LR
 
 `score = severity (10 per level, max 50) + age (up to 20, linear to 72 h) + repeats (5 per other open report within 300 m in 7 days, max 20) + site (10 for hospital/market/ISBT sectors 12, 16, 17, 22, 32, 43; else 5)`.
 The sensitive-sector list is an assumption a municipality would maintain. See `saafroute/scoring.py`.
+
+**Repeat reports.** If a similar open ticket already exists (same kind, within 100 m of a GPS report or in the same sector, last 7 days), the reporter is asked "Is this the same spot?". If they say yes, their report is added to that ticket as a counter ("3 reports of this spot") and is not a ticket of its own. The counter is display-only: it never changes the hotspot score, the truck load or the routes.
 
 ### Truck load assumption
 
@@ -139,7 +141,7 @@ Switch models without code changes in `config/models.yaml`, or with env vars
 
 ## Privacy and oversight
 
-Photo metadata (including GPS) is stripped on upload; faces and number plates trigger storage of a blurred copy only; reports are anonymous;
+Photo metadata (including GPS) is stripped on upload; photos where a face or number plate is flagged are shown blurred on the public city view (the reporter and officials see the sharp photo); reports are anonymous;
 every ticket needs an official's approval. Details and limits: [docs/privacy.md](docs/privacy.md).
 
 ## Known limits
