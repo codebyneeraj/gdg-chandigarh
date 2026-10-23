@@ -50,7 +50,7 @@ flowchart LR
 | Validation | Pydantic v2 | Strict schema, extra keys rejected. |
 | Scoring | Plain Python | Explainable, testable, no model. |
 | Routing | OR-Tools 9.15 CVRP, guided local search, 3 s limit | Standard, open source, handles capacity and drops low-priority stops if the fleet is full. |
-| Distances | Haversine × 1.3 | Chandigarh's road grid makes travel ≈ 4/π ≈ 1.27 × straight-line on average. **Not road-network distances**, to keep setup simple. OSRM can be swapped into `routing.distance_matrix`. |
+| Distances | **OSRM road distances** (OpenStreetMap), falling back to haversine × 1.3 | Real driving distances from the public OSRM demo server (demo use only; point `SAAFROUTE_OSRM_URL` at your own server for production). If OSRM is unreachable or `--offline`, it falls back to straight-line × 1.3 (≈ 4/π for a grid city), and the dashboard note says which method was used. Both plans in a comparison share one distance table. |
 | API / storage | FastAPI + SQLite | No external services needed. |
 | Frontend | Plain HTML/JS + Leaflet 1.9.4 (vendored) | Works on phones and projectors, no build step. |
 
@@ -70,19 +70,33 @@ Vision benchmark on **41 hand-labelled, openly licensed photos** (Wikimedia Comm
 
 | | Gemma 4 26B-A4B (open, **chosen**) | Gemma 4 31B (open) | Gemini 3.5 Flash (closed, reference) |
 |---|---|---|---|
-| Images run / answered | 38 / 34 | 29 / 2 | 41 / 19 |
-| Failures (all API errors; 0 invalid JSON) | 4 × 500 | 27 × 500/503 | 22 × 429 (20/day quota) |
-| Kind accuracy (answered) | 85 % | 2/2 | 84 % |
-| Severity within ±1 (answered) | 100 % | 2/2 | 89 % |
-| Clean vs needs-collection (answered) | 100 % | 2/2 | 95 % |
-| Median latency | 21 s | ~95 s | 9 s |
+| Images run / answered | 38 / 38 | 6 / 6 | 41 / 40 |
+| Failures (final run; 0 invalid JSON) | none | none (35 images not run) | 1 API error |
+| Kind accuracy (answered) | 87 % | 6/6 | 88 % |
+| Severity exact / within ±1 (answered) | 74 % / 100 % | 5/6 / 6/6 | 83 % / 95 % |
+| Clean vs needs-collection (answered) | 100 % | 6/6 | 98 % |
+| Median / p90 latency | 21 s / 87 s | 66 s / 96 s (n=6) | 7 s / 13 s |
 
-Run stopped early for the deadline (26B: 38 of 41 images). Gemma 4 31B was mostly unavailable on the
-free API during testing, so its accuracy is unmeasured; it remains a fallback.
+Numbers are from `data/bench/results/summary.json` (re-run after retrying earlier API failures; regenerate
+with `scripts/benchmark.py --summary-only`). Caveats:
 
-Route simulation (synthetic seed data, 16 approved tickets, 3 trucks): optimised **54.9 km** vs naive
-fixed-order **61.6 km** (**10.8 % shorter**). This is a **simulation**. It will differ with real data,
-road distances and real fleet constraints.
+- 26B: 3 of the 41 images were never run (38 / 41), so the figures cover 93 % of the set.
+- 31B: only 6 images answered, because the free API kept returning 500/503 during testing. With n=6 its
+  accuracy is **not comparable**; it stays a fallback.
+- The first run's failure records for 31B and Gemini 3.5 Flash (27 × 500/503 and 22 × 429 from the 20/day
+  quota) were overwritten when the benchmark was re-run, so those counts are no longer in the result files.
+- 41 images is a small set: one image is about 2.4 percentage points, so differences of a few points
+  between models are within noise.
+
+Route simulation (synthetic seed data, 16 approved tickets, 3 trucks, 1 low-priority stop dropped for
+capacity). The saving depends on the distance method:
+
+| Distances | Optimised | Naive fixed-order | Shorter |
+|---|---|---|---|
+| OSRM road distances (default) | **63.4 km** | 68.4 km | **7.3 %** |
+| Straight-line × 1.3 (fallback / `--offline`) | 54.9 km | 61.6 km | 10.8 % |
+
+This is a **simulation** on synthetic data. It will differ with real tickets and real fleet constraints.
 
 ## Run it
 
@@ -131,7 +145,7 @@ every ticket needs an official's approval. Details and limits: [docs/privacy.md]
 ## Known limits
 
 - Synthetic fleet and demo reports; no municipal data or integration.
-- Straight-line × 1.3 distances, not a road network.
+- Distances come from the public OSRM demo server when reachable; otherwise straight-line × 1.3 (the plan note says which). Route lines on the map are still straight segments between stops, not the road geometry.
 - Free-tier Gemini API quotas are small (we hit a 20 requests/day limit on Gemini 3.5 Flash) and
   Gemma 4 31B returned frequent "high demand" errors during testing. A pilot needs a paid tier or self-hosting.
 - Vision latency through the hosted API was tens of seconds per photo in our tests.
