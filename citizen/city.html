@@ -24,6 +24,10 @@
   .tile span { color: var(--muted); font-size: .85rem; }
   .tile.wait b { color: var(--wait); } .tile.sched b { color: var(--sched); } .tile.done b { color: var(--done); }
   .busy { color: var(--muted); font-size: .88rem; margin: 10px 2px 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: .84rem; color: var(--ink); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+  .legend small { flex-basis: 100%; color: var(--muted); font-size: .78rem; }
   #map { height: 260px; border-radius: 14px; border: 1px solid var(--line); margin-top: 14px; z-index: 0; }
   .controls { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .chips { display: flex; gap: 6px; overflow-x: auto; width: 100%; padding-bottom: 2px; }
@@ -80,6 +84,12 @@
   <p class="busy" id="busy"></p>
 
   <div id="map" aria-label="Map of reported waste"></div>
+  <div class="legend" aria-label="Map legend">
+    <span><i style="background:var(--wait)"></i>Awaiting review</span>
+    <span><i style="background:var(--sched)"></i>Approved, scheduled</span>
+    <span><i style="background:var(--done)"></i>Collected</span>
+    <small>Pins are placed at the sector centre, not the exact spot.</small>
+  </div>
 
   <div class="controls">
     <div class="chips" id="chips" role="tablist">
@@ -119,7 +129,7 @@ function initMap() {
     map = L.map("map", { zoomSnap: 0.25 }).setView([30.728, 76.775], 12.5);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap contributors" }).addTo(map);
     layer = L.layerGroup().addTo(map);
-  } catch { map = null; $("#map").style.display = "none"; }
+  } catch { map = null; $("#map").style.display = "none"; $(".legend").style.display = "none"; }
 }
 
 function visible() {

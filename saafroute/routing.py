@@ -272,5 +272,42 @@ def compare(depot: Depot, trucks: list[Truck], stops: list[Stop]) -> dict:
     }
 
 
+_geom_cache: dict[tuple, list[tuple[float, float]]] = {}
+
+
+def road_geometry(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Drive-along-the-roads polyline through `points`, from OSRM's /route service.
+
+    Display only: the solver never sees it. Falls back to the straight segments
+    between the points if OSRM is off, unreachable or in cooldown.
+    """
+    global _osrm_failed_at
+    if len(points) < 2:
+        return list(points)
+    key = tuple((round(lat, 5), round(lon, 5)) for lat, lon in points)
+    if key in _geom_cache:
+        return _geom_cache[key]
+    base = _osrm_url()
+    if base.lower() in ("", "off", "none") or time.monotonic() - _osrm_failed_at < OSRM_RETRY_AFTER_S:
+        return list(points)
+    coords = ";".join(f"{lon:.6f},{lat:.6f}" for lat, lon in points)
+    try:
+        r = httpx.get(f"{base}/route/v1/driving/{coords}",
+                      params={"overview": "full", "geometries": "geojson"}, timeout=OSRM_TIMEOUT_S)
+        r.raise_for_status()
+        body = r.json()
+        if body.get("code") != "Ok" or not body.get("routes"):
+            raise ValueError(f"unexpected OSRM reply: {body.get('code')}")
+        line = [(lat, lon) for lon, lat in body["routes"][0]["geometry"]["coordinates"]]
+    except Exception as exc:
+        _osrm_failed_at = time.monotonic()
+        log.warning("OSRM route geometry unavailable (%s); drawing straight segments", exc)
+        return list(points)
+    if len(_geom_cache) > 64:
+        _geom_cache.clear()
+    _geom_cache[key] = line
+    return line
+
+
 def km(m: int) -> float:
     return math.floor(m / 10) / 100

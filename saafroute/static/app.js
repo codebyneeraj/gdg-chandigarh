@@ -509,14 +509,14 @@ function drawPlan(p) {
   p.routes.forEach((r, i) => {
     if (!r.path.length) return;
     const color = TRUCK_COLORS[i % TRUCK_COLORS.length];
-    L.polyline(r.path, { color, weight: 5, opacity: .85 }).bindTooltip(`${r.truck}: ${r.stop_ids.length} stops, ${r.distance_km} km`).addTo(routeLayer);
+    L.polyline(r.road_path || r.path, { color, weight: 5, opacity: .85 }).bindTooltip(`${r.truck}: ${r.stop_ids.length} stops, ${r.distance_km} km`).addTo(routeLayer);
     r.path.slice(1, -1).forEach((pt, k) => L.marker(pt, {
       icon: L.divIcon({ className: "", html: `<div style="background:${color};color:#fff;border-radius:50%;width:18px;height:18px;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid #fff">${k + 1}</div>`, iconSize: [18, 18], iconAnchor: [9, -6] }),
       interactive: false,
     }).addTo(routeLayer));
   });
   p.baseline.forEach((r) => {
-    if (r.path.length) L.polyline(r.path, { color: "#555", weight: 3, dashArray: "6 6", opacity: .8 }).addTo(baseLayer);
+    if (r.path.length) L.polyline(r.road_path || r.path, { color: "#555", weight: 3, dashArray: "6 6", opacity: .8 }).addTo(baseLayer);
   });
   if ($("#showBase").checked) baseLayer.addTo(map);
 }

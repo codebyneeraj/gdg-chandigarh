@@ -349,7 +349,8 @@ def plan_routes() -> dict:
     def ser(plan: routing.Plan) -> list[dict]:
         return [{"truck": r.truck, "stop_ids": r.stop_ids, "load": r.load,
                  "capacity": next(t.capacity for t in trucks if t.id == r.truck),
-                 "distance_km": routing.km(r.distance_m), "path": r.path} for r in plan.routes]
+                 "distance_km": routing.km(r.distance_m), "path": r.path,
+                 "road_path": routing.road_geometry(r.path)} for r in plan.routes]
 
     return {
         "stops": len(stops),
